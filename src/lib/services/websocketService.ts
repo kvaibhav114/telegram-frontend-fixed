@@ -26,11 +26,16 @@ class WebSocketService {
 
   onSignal(handler: SignalHandler) {
     this.signalHandlers.add(handler);
-    return () => { this.signalHandlers.delete(handler); };
+    return () => {
+      this.signalHandlers.delete(handler);
+    };
   }
 
   sendSignal(msg: Record<string, unknown>) {
-    this.client?.publish({ destination: "/app/call.signal", body: JSON.stringify(msg) });
+    this.client?.publish({
+      destination: "/app/call.signal",
+      body: JSON.stringify(msg),
+    });
   }
 
   // ── Chat channel ──────────────────────────────────────────────────
@@ -68,7 +73,10 @@ class WebSocketService {
   markAsRead(chatId: string, messageId: string) {
     this.client?.publish({
       destination: "/app/chat.read",
-      body: JSON.stringify({ chatId: Number(chatId), messageId: Number(messageId) }),
+      body: JSON.stringify({
+        chatId: Number(chatId),
+        messageId: Number(messageId),
+      }),
     });
   }
 
@@ -94,7 +102,13 @@ class WebSocketService {
           this.attachChat(chatId);
         }
 
-        // Subscribe to user signal queue (calls)
+        // Subscribe to call lifecycle events from backend CallService
+        this.client?.subscribe("/user/queue/calls", (frame) => {
+          const event = JSON.parse(frame.body) as WsEvent;
+          this.signalHandlers.forEach((h) => h(event));
+        });
+
+        // Subscribe to WebRTC signaling (offer/answer/ice/call signals)
         this.client?.subscribe("/user/queue/signal", (frame) => {
           const event = JSON.parse(frame.body) as WsEvent;
           this.signalHandlers.forEach((h) => h(event));

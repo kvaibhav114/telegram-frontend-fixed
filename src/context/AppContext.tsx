@@ -199,28 +199,51 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsub = websocketService.onSignal(async (msg) => {
-      const senderId = Number(msg.senderId ?? 0);
-      const parsePayload = (p: unknown) => {
-        if (typeof p !== "string") return null;
-        try {
-          return JSON.parse(p) as { callType?: CallType };
-        } catch {
-          return null;
+      // ── Normalize fields ──────────────────────────────────────
+      // /queue/signal events have { callId, senderId, type, payload }
+      // /queue/calls  events have { type, payload: CallResponse }
+      // where CallResponse contains callerId, callId, callType, etc.
+      const p = msg.payload as Record<string, unknown> | undefined;
+
+      const senderId = Number(msg.senderId ?? p?.callerId ?? 0);
+      const callId = String(msg.callId ?? p?.callId ?? "");
+
+      // callType can be: a JSON-encoded string (from signal), or a
+      // direct field on the CallResponse payload (from /queue/calls)
+      const resolveCallType = (): CallType => {
+        // Direct field on payload (from backend CallResponse)
+        if (p?.callType === "VOICE" || p?.callType === "VIDEO") {
+          return p.callType as CallType;
         }
+        // JSON-encoded string payload (from signal channel)
+        if (typeof msg.payload === "string") {
+          try {
+            const parsed = JSON.parse(msg.payload as string) as {
+              callType?: CallType;
+            };
+            if (parsed.callType === "VOICE" || parsed.callType === "VIDEO") {
+              return parsed.callType;
+            }
+          } catch {
+            // ignore
+          }
+        }
+        return "VIDEO";
       };
 
-      if (msg.type === "CALL_REQUEST") {
-        const payload = parsePayload(msg.payload);
+      // ── INCOMING CALL ─────────────────────────────────────────
+      if (msg.type === "CALL_REQUEST" || msg.type === "INCOMING_CALL") {
         setCall({
           state: "incoming",
           peer: getPeer(senderId),
-          type: payload?.callType === "VOICE" ? "VOICE" : "VIDEO",
-          callId: String(msg.callId),
+          type: resolveCallType(),
+          callId,
         });
         return;
       }
 
-      if (msg.type === "CALL_ACCEPT") {
+      // ── CALL ACCEPTED ─────────────────────────────────────────
+      if (msg.type === "CALL_ACCEPT" || msg.type === "CALL_ACCEPTED") {
         const active = callRef.current;
         if (active.state !== "outgoing") return;
 
@@ -260,6 +283,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // ── ICE CANDIDATE ─────────────────────────────────────────
       if (msg.type === "ICE_CANDIDATE") {
         const c =
           typeof msg.payload === "string"
@@ -269,6 +293,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // ── OFFER ─────────────────────────────────────────────────
       if (msg.type === "OFFER") {
         const active = callRef.current;
         if (active.state === "idle") return;
@@ -279,7 +304,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           state: "active",
           peer,
           type: callType,
-          callId: String(msg.callId),
+          callId,
         });
         try {
           await webrtcService.startLocalMedia(callType);
@@ -293,7 +318,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         pc.onicecandidate = (e) => {
           if (!e.candidate) return;
           websocketService.sendSignal({
-            callId: String(msg.callId),
+            callId,
             receiverId: senderId,
             type: "ICE_CANDIDATE",
             payload: JSON.stringify(e.candidate),
@@ -308,7 +333,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await webrtcService.setRemoteDescription(desc);
         const answer = await webrtcService.createAnswer();
         websocketService.sendSignal({
-          callId: String(msg.callId),
+          callId,
           receiverId: senderId,
           type: "ANSWER",
           payload: JSON.stringify(answer),
@@ -316,6 +341,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // ── ANSWER ────────────────────────────────────────────────
       if (msg.type === "ANSWER") {
         const desc =
           typeof msg.payload === "string"
@@ -325,7 +351,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (msg.type === "CALL_REJECT" || msg.type === "CALL_END") {
+      // ── CALL ENDED / REJECTED / CANCELLED / MISSED ────────────
+      if (
+        msg.type === "CALL_REJECT" ||
+        msg.type === "CALL_REJECTED" ||
+        msg.type === "CALL_END" ||
+        msg.type === "CALL_ENDED" ||
+        msg.type === "CALL_CANCELLED" ||
+        msg.type === "CALL_MISSED"
+      ) {
         webrtcService.reset();
         setCall({ state: "idle" });
       }
@@ -510,12 +544,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const c = callRef.current;
       if (c.state !== "incoming") return;
       callApi.accept(c.callId).catch(console.error);
-      setCall({ state: "active", peer: c.peer, type: c.type, callId: c.callId });
+      // Send signal so caller knows and can start WebRTC offer
+      websocketService.sendSignal({
+        callId: c.callId,
+        receiverId: Number(c.peer.id),
+        type: "CALL_ACCEPT",
+        payload: JSON.stringify({ callType: c.type }),
+      });
+      setCall({
+        state: "active",
+        peer: c.peer,
+        type: c.type,
+        callId: c.callId,
+      });
     },
 
     endCall: () => {
       const c = callRef.current;
       if (c.state !== "idle") {
+        // Notify peer via WebSocket signal for fast cleanup
+        websocketService.sendSignal({
+          callId: c.callId,
+          receiverId: Number(c.peer.id),
+          type: "CALL_END",
+          payload: "{}",
+        });
+        // Also update backend DB state
         const apiCall =
           c.state === "outgoing"
             ? callApi.cancel(c.callId)
