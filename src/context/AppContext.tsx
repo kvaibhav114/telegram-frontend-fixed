@@ -490,25 +490,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     call,
 
     startCall: async (peer, type) => {
-      const resp = await callApi.initiate(Number(peer.id), type);
-      const callId = String(resp.callId);
-      setCall({ state: "outgoing", peer, type, callId });
-      websocketService.sendSignal({
-        callId: resp.callId,
-        receiverId: Number(peer.id),
-        type: "CALL_REQUEST",
-        payload: JSON.stringify({ callType: type }),
-      });
+      if (callRef.current.state !== "idle") return;
+      try {
+        const resp = await callApi.initiate(Number(peer.id), type);
+        const callId = String(resp.callId);
+        setCall({ state: "outgoing", peer, type, callId });
+        websocketService.sendSignal({
+          callId: resp.callId,
+          receiverId: Number(peer.id),
+          type: "CALL_REQUEST",
+          payload: JSON.stringify({ callType: type }),
+        });
+      } catch (err) {
+        console.error("Failed to initiate call", err);
+      }
     },
 
-    acceptCall: () =>
-      setCall((c) =>
-        c.state === "incoming"
-          ? { state: "active", peer: c.peer, type: c.type, callId: c.callId }
-          : c,
-      ),
+    acceptCall: () => {
+      const c = callRef.current;
+      if (c.state !== "incoming") return;
+      callApi.accept(c.callId).catch(console.error);
+      setCall({ state: "active", peer: c.peer, type: c.type, callId: c.callId });
+    },
 
     endCall: () => {
+      const c = callRef.current;
+      if (c.state !== "idle") {
+        const apiCall =
+          c.state === "outgoing"
+            ? callApi.cancel(c.callId)
+            : callApi.end(c.callId);
+        apiCall.catch(console.error);
+      }
       webrtcService.reset();
       setCall({ state: "idle" });
     },
