@@ -93,9 +93,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const callRef = useRef(call);
   const userRef = useRef(user);
 
-  useEffect(() => {
-    callRef.current = call;
-  }, [call]);
+  // Synchronously update ref AND state so back-to-back WebSocket events
+  // always see the latest value without waiting for a React re-render.
+  const updateCall = (next: CallState) => {
+    callRef.current = next;
+    setCall(next);
+  };
+
   useEffect(() => {
     userRef.current = user;
   }, [user]);
@@ -237,7 +241,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       // ── INCOMING CALL ─────────────────────────────────────────
       if (msg.type === "CALL_REQUEST" || msg.type === "INCOMING_CALL") {
-        setCall({
+        updateCall({
           state: "incoming",
           peer: getPeer(senderId),
           type: resolveCallType(),
@@ -251,7 +255,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const active = callRef.current;
         if (active.state !== "outgoing") return;
 
-        setCall({
+        updateCall({
           state: "active",
           peer: active.peer,
           type: active.type,
@@ -261,7 +265,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           await webrtcService.startLocalMedia(active.type);
         } catch {
           webrtcService.reset();
-          setCall({ state: "idle" });
+          updateCall({ state: "idle" });
           return;
         }
         const pc = webrtcService.createPeerConnection();
@@ -304,7 +308,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const callType = active.type;
         const peer = active.peer;
 
-        setCall({
+        updateCall({
           state: "active",
           peer,
           type: callType,
@@ -314,7 +318,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           await webrtcService.startLocalMedia(callType);
         } catch {
           webrtcService.reset();
-          setCall({ state: "idle" });
+          updateCall({ state: "idle" });
           return;
         }
         const pc = webrtcService.createPeerConnection();
@@ -365,7 +369,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         msg.type === "CALL_MISSED"
       ) {
         webrtcService.reset();
-        setCall({ state: "idle" });
+        updateCall({ state: "idle" });
       }
     });
 
@@ -535,7 +539,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         const resp = await callApi.initiate(Number(peer.id), type);
         const callId = String(resp.callId);
-        setCall({ state: "outgoing", peer, type, callId });
+        updateCall({ state: "outgoing", peer, type, callId });
         websocketService.sendSignal({
           callId: resp.callId,
           receiverId: Number(peer.id),
@@ -558,7 +562,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         type: "CALL_ACCEPT",
         payload: JSON.stringify({ callType: c.type }),
       });
-      setCall({
+      updateCall({
         state: "active",
         peer: c.peer,
         type: c.type,
@@ -584,7 +588,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         apiCall.catch(console.error);
       }
       webrtcService.reset();
-      setCall({ state: "idle" });
+      updateCall({ state: "idle" });
     },
   };
 
