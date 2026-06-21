@@ -230,7 +230,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           type: active.type,
           callId: active.callId,
         });
-        await webrtcService.startLocalMedia(active.type);
+        try {
+          await webrtcService.startLocalMedia(active.type);
+        } catch {
+          webrtcService.reset();
+          setCall({ state: "idle" });
+          return;
+        }
         const pc = webrtcService.createPeerConnection();
 
         pc.onicecandidate = (e) => {
@@ -265,8 +271,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (msg.type === "OFFER") {
         const active = callRef.current;
-        const callType = active.state !== "idle" ? active.type : "VIDEO";
-        const peer = active.state !== "idle" ? active.peer : getPeer(senderId);
+        if (active.state === "idle") return;
+        const callType = active.type;
+        const peer = active.peer;
 
         setCall({
           state: "active",
@@ -274,7 +281,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           type: callType,
           callId: String(msg.callId),
         });
-        await webrtcService.startLocalMedia(callType);
+        try {
+          await webrtcService.startLocalMedia(callType);
+        } catch {
+          webrtcService.reset();
+          setCall({ state: "idle" });
+          return;
+        }
         const pc = webrtcService.createPeerConnection();
 
         pc.onicecandidate = (e) => {

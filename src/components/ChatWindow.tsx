@@ -11,11 +11,13 @@ export function ChatWindow({ chat }: { chat: Chat }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [showInfo, setShowInfo] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const lastMarkedRef = useRef<string | null>(null);
   const isGroup = chat.type !== "PRIVATE";
 
   // Load message history on chat change
   useEffect(() => {
     setShowInfo(false);
+    lastMarkedRef.current = null;
     loadMessages(chat.id).then(setMessages);
   }, [chat.id]);
 
@@ -24,12 +26,15 @@ export function ChatWindow({ chat }: { chat: Chat }) {
     return subscribeChat(chat.id, setMessages);
   }, [chat.id]);
 
-  // Mark unread messages as read
+  // Mark unread messages as read — only when the latest incoming message changes
   useEffect(() => {
-    const lastUnread = [...messages].reverse().find(
-      (m) => m.senderId !== user.id && m.status !== "read"
+    const lastIncoming = [...messages].reverse().find(
+      (m) => m.senderId !== user.id
     );
-    if (lastUnread) markAsRead(chat.id, lastUnread.id);
+    if (lastIncoming && lastIncoming.id !== lastMarkedRef.current) {
+      lastMarkedRef.current = lastIncoming.id;
+      markAsRead(chat.id, lastIncoming.id);
+    }
   }, [chat.id, messages, user.id]);
 
   // Auto-scroll to bottom

@@ -27,16 +27,16 @@ export function VoiceCallScreen() {
 
   useEffect(() => {
     if (!isActive) return;
-
     webrtcService.setOnRemoteStream((stream) => {
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = stream;
       }
     });
+  }, [isActive]);
 
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.muted = !speaker;
-    }
+  useEffect(() => {
+    if (!isActive || !remoteAudioRef.current) return;
+    remoteAudioRef.current.muted = !speaker;
   }, [isActive, speaker]);
 
   if (!isActive) return null;

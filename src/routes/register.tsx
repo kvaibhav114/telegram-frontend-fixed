@@ -50,8 +50,6 @@ const submit = async (e: React.FormEvent) => {
       displayName: name,
     });
 
-    console.log("Registration successful:", response);
-
     nav({ to: "/login" });
 
   } catch (err: any) {

@@ -15,21 +15,29 @@ class WebRTCService {
       return this.localStream;
     this.stopLocalMedia();
     this.activeCallType = callType;
-    this.localStream = await navigator.mediaDevices.getUserMedia({
-      video:
-        callType === "VIDEO"
-          ? {
-              width: { ideal: 640 },
-              height: { ideal: 480 },
-              frameRate: { ideal: 24 },
-            }
-          : false,
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    });
+    try {
+      this.localStream = await navigator.mediaDevices.getUserMedia({
+        video:
+          callType === "VIDEO"
+            ? {
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                frameRate: { ideal: 24 },
+              }
+            : false,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+    } catch (err) {
+      this.activeCallType = null;
+      if (err instanceof DOMException && err.name === "NotAllowedError") {
+        throw new Error("Camera/microphone access was denied. Please allow permissions and try again.");
+      }
+      throw new Error("Could not access camera/microphone. Please check your device.");
+    }
     return this.localStream;
   }
 

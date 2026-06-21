@@ -79,13 +79,12 @@ class WebSocketService {
     if (!authToken || this.client?.active) return;
     this.userId = userId;
 
-    const wsUrl = API_BASE_URL.replace(/^http/, "ws") + "/ws";
+    const wsUrl = API_BASE_URL.replace(/^http(s?)/, "ws$1") + "/ws";
 
     this.client = new Client({
       brokerURL: wsUrl,
       reconnectDelay: 5000,
       connectHeaders: { Authorization: `Bearer ${authToken}` },
-      debug: (msg) => console.log("STOMP:", msg),
 
       onConnect: () => {
         console.log("WebSocket connected");
