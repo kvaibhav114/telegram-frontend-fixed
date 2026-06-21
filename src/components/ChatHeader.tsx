@@ -6,8 +6,9 @@ export function ChatHeader({ chat, onInfo }: { chat: Chat; onInfo?: () => void }
   const { user, startCall } = useApp();
 
   const callPeer = (type: CallType) => {
+    if (!user.id || user.id === "0") return;
     const other = chat.members.find((m) => m.userId !== user.id);
-    if (!other) return;
+    if (!other || other.userId === user.id) return;
     const peer = {
       id: other.userId,
       username: other.username,

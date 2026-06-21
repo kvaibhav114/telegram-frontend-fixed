@@ -205,8 +205,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // where CallResponse contains callerId, callId, callType, etc.
       const p = msg.payload as Record<string, unknown> | undefined;
 
-      const senderId = Number(msg.senderId ?? p?.callerId ?? 0);
-      const callId = String(msg.callId ?? p?.callId ?? "");
+      const senderId = Number(
+        msg.senderId ?? p?.callerId ?? 0,
+      );
+      const callId = String(
+        msg.callId ?? p?.callId ?? "",
+      );
 
       // callType can be: a JSON-encoded string (from signal), or a
       // direct field on the CallResponse payload (from /queue/calls)
@@ -435,7 +439,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           } else if (event.type === "TYPING") {
             const isTyping = Boolean((payload as any)?.isTyping ?? true);
             setChats((cs) =>
-              cs.map((c) => (c.id === chatId ? { ...c, typing: isTyping } : c)),
+              cs.map((c) =>
+                c.id === chatId ? { ...c, typing: isTyping } : c,
+              ),
             );
           }
 
@@ -525,6 +531,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     startCall: async (peer, type) => {
       if (callRef.current.state !== "idle") return;
+      if (!user.id || user.id === "0" || peer.id === user.id) return;
       try {
         const resp = await callApi.initiate(Number(peer.id), type);
         const callId = String(resp.callId);
