@@ -26,6 +26,15 @@ export interface MessageResponse {
   editedAt: string | null;
 }
 
+export interface PinnedMessageResponse {
+  id: number;
+  chatId: number;
+  message: MessageResponse;
+  pinnedById: number;
+  pinnedByName: string;
+  pinnedAt: string;
+}
+
 export interface ChatResponse {
   id: number;
   type: ChatType;
@@ -66,4 +75,21 @@ export const chatApi = {
 
   removeMember: (chatId: number | string, userId: number | string) =>
     apiFetch(`/api/chats/${chatId}/members/${userId}`, { method: "DELETE" }),
+
+  // Invite links
+  joinViaInviteLink: (inviteLink: string) =>
+    apiFetch<ChatResponse>(`/api/chats/join/${inviteLink}`, { method: "POST" }),
+
+  regenerateInviteLink: (chatId: number | string) =>
+    apiFetch<string>(`/api/chats/${chatId}/invite-link`, { method: "POST" }),
+
+  // Pinned messages
+  getPinnedMessages: (chatId: number | string) =>
+    apiFetch<PinnedMessageResponse[]>(`/api/chats/${chatId}/pins`),
+
+  pinMessage: (chatId: number | string, messageId: number | string) =>
+    apiFetch<PinnedMessageResponse>(`/api/chats/${chatId}/pins/${messageId}`, { method: "POST" }),
+
+  unpinMessage: (chatId: number | string, messageId: number | string) =>
+    apiFetch(`/api/chats/${chatId}/pins/${messageId}`, { method: "DELETE" }),
 };

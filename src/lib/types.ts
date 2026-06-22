@@ -1,12 +1,11 @@
-// ── Enums (matching backend) ──────────────────────────────────────────
-
+// Enums matching backend
 export type ChatType = "PRIVATE" | "GROUP" | "CHANNEL";
 export type MessageType = "TEXT" | "VOICE" | "FILE" | "SYSTEM";
 export type MemberRole = "OWNER" | "ADMIN" | "MEMBER";
 export type CallType = "VOICE" | "VIDEO";
 export type CallStatus = "RINGING" | "ACTIVE" | "ENDED" | "REJECTED" | "MISSED" | "CANCELLED";
-
-// ── Frontend models ──────────────────────────────────────────────────
+export type FileTransferStatus = "PENDING" | "ACCEPTED" | "TRANSFERRING" | "COMPLETED" | "REJECTED" | "CANCELLED" | "FAILED";
+export type NotificationType = "NEW_MESSAGE" | "REPLY" | "USER_JOINED_CHAT" | "USER_LEFT_CHAT" | "CALL_INCOMING" | "CALL_MISSED";
 
 export interface User {
   id: string;
@@ -19,19 +18,6 @@ export interface User {
   lastSeenAt: string | null;
 }
 
-export interface Chat {
-  id: string;
-  type: ChatType;
-  title: string;
-  description: string;
-  avatarUrl: string;
-  members: ChatMember[];
-  lastMessage: string;
-  lastTime: string;
-  unread: number;
-  typing: boolean;
-}
-
 export interface ChatMember {
   userId: string;
   username: string;
@@ -39,6 +25,20 @@ export interface ChatMember {
   avatarUrl: string;
   role: MemberRole;
   isOnline: boolean;
+}
+
+export interface Chat {
+  id: string;
+  type: ChatType;
+  title: string;
+  description: string;
+  avatarUrl: string;
+  inviteLink: string | null;
+  members: ChatMember[];
+  lastMessage: string;
+  lastTime: string;
+  unread: number;
+  typing: boolean;
 }
 
 export interface Message {
@@ -56,7 +56,26 @@ export interface Message {
   status: "sent" | "delivered" | "read";
 }
 
-// ── Call state ────────────────────────────────────────────────────────
+export interface PinnedMessage {
+  id: number;
+  chatId: number;
+  message: Message;
+  pinnedById: number;
+  pinnedByName: string;
+  pinnedAt: string;
+}
+
+export interface Notification {
+  id: number;
+  actorId: number;
+  actorName: string;
+  type: NotificationType;
+  referenceId: number;
+  chatId: number | null;
+  content: string;
+  isRead: boolean;
+  createdAt: string;
+}
 
 export type CallState =
   | { state: "idle" }
