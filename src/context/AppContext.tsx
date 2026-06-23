@@ -26,6 +26,24 @@ function toMessage(r: MessageResponse): Message {
   };
 }
 
+function getPrivatePeerId(chat: Chat, meId: string): string | null {
+  if (chat.type !== "PRIVATE") return null;
+  return chat.members.find((m) => m.userId !== meId)?.userId ?? null;
+}
+
+function getChatKey(chat: Chat, meId: string): string {
+  const peerId = getPrivatePeerId(chat, meId);
+  return chat.type === "PRIVATE" && peerId ? `PRIVATE:${peerId}` : `${chat.type}:${chat.id}`;
+}
+
+function mergeChatsByPeer(chats: Chat[], meId: string): Chat[] {
+  const merged = new Map<string, Chat>();
+  for (const chat of chats) {
+    merged.set(getChatKey(chat, meId), chat);
+  }
+  return Array.from(merged.values());
+}
+
 const EMPTY_USER: User = { id: "0", username: "", displayName: "Loading...", email: "", bio: "", avatarUrl: "", isOnline: false, lastSeenAt: null };
 
 interface AppCtx {
@@ -76,6 +94,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => { userRef.current = user; }, [user]);
 
   const upsertUser = (u: User) => setUsers((prev) => ({ ...prev, [u.id]: u }));
+  const setNormalizedChats = (next: Chat[] | ((prev: Chat[]) => Chat[])) => {
+    setChats((prev) => {
+      const resolved = typeof next === "function" ? next(prev) : next;
+      return mergeChatsByPeer(resolved, userRef.current.id);
+    });
+  };
 
   const getPeer = (senderId: number): User =>
     users[String(senderId)] ?? {
@@ -115,7 +139,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         const chatPage = await chatApi.getChats();
         if (!alive) return;
-        setChats(chatPage.content.map((c) => mapChatResponse(c, me.id)));
+        setNormalizedChats(chatPage.content.map((c) => mapChatResponse(c, me.id)));
 
         // Load notifications
         try {
@@ -235,7 +259,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (event.type === "NEW_MESSAGE") {
             const msg = toMessage(payload);
             next = current.some((m) => m.id === msg.id) ? current : [...current, msg];
-            setChats((cs) => cs.map((c) => c.id === chatId ? { ...c, lastMessage: msg.content, lastTime: formatTime(msg.createdAt), unread: msg.senderId !== userRef.current.id ? c.unread + 1 : c.unread } : c));
+            setNormalizedChats((cs) => cs.map((c) => c.id === chatId ? { ...c, lastMessage: msg.content, lastTime: formatTime(msg.createdAt), unread: msg.senderId !== userRef.current.id ? c.unread + 1 : c.unread } : c));
           } else if (event.type === "MESSAGE_EDITED") {
             const msgId = String(payload.id);
             next = current.map((m) => m.id === msgId ? { ...m, content: payload.content, isEdited: true } : m);
@@ -244,7 +268,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             next = current.filter((m) => m.id !== msgId);
           } else if (event.type === "TYPING") {
             const isTyping = Boolean((payload as any)?.isTyping ?? true);
-            setChats((cs) => cs.map((c) => c.id === chatId ? { ...c, typing: isTyping } : c));
+            setNormalizedChats((cs) => cs.map((c) => c.id === chatId ? { ...c, typing: isTyping } : c));
           }
           cb(next);
           return { ...prev, [chatId]: next };
@@ -256,7 +280,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     sendTyping: (chatId, isTyping) => websocketService.sendTyping(chatId, isTyping),
     markAsRead: (chatId, messageId) => {
       websocketService.markAsRead(chatId, messageId);
-      setChats((cs) => cs.map((c) => (c.id === chatId ? { ...c, unread: 0 } : c)));
+      setNormalizedChats((cs) => cs.map((c) => (c.id === chatId ? { ...c, unread: 0 } : c)));
     },
 
     editMessage: async (messageId, content) => {
@@ -292,13 +316,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         const chatResp = await chatApi.createChat("PRIVATE", [Number(peer.id)]);
         const newChat = mapChatResponse(chatResp, user.id);
-        setChats((prev) => [newChat, ...prev]);
+        setNormalizedChats((prev) => [newChat, ...prev]);
         return newChat;
       } catch {
         const refreshed = await chatApi.getChats();
         const mapped = refreshed.content.map((c) => mapChatResponse(c, user.id));
-        setChats(mapped);
-        const resolved = mapped.find((c) => c.type === "PRIVATE" && c.members.some((m) => m.userId === peer.id));
+        const normalized = mergeChatsByPeer(mapped, user.id);
+        setNormalizedChats(normalized);
+        const resolved = normalized.find((c) => c.type === "PRIVATE" && c.members.some((m) => m.userId === peer.id));
         if (!resolved) {
           throw new Error("Could not open chat with this user.");
         }
@@ -309,7 +334,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     createGroup: async (type, title, memberIds, description) => {
       const resp = await chatApi.createChat(type, memberIds, title, description);
       const newChat = mapChatResponse(resp, user.id);
-      setChats((prev) => [newChat, ...prev]);
+      setNormalizedChats((prev) => [newChat, ...prev]);
       return newChat;
     },
 
@@ -319,7 +344,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     removeMemberFromChat: async (chatId, userId) => {
       await chatApi.removeMember(chatId, userId);
-      setChats((cs) => cs.map((c) => c.id === chatId ? { ...c, members: c.members.filter((m) => m.userId !== userId) } : c));
+      setNormalizedChats((cs) => cs.map((c) => c.id === chatId ? { ...c, members: c.members.filter((m) => m.userId !== userId) } : c));
     },
 
     call,
