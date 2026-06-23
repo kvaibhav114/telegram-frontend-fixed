@@ -1,9 +1,7 @@
 import { Mic, MicOff, PhoneOff, Video, VideoOff, Monitor } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/context/AppContext";
-import { websocketService } from "@/lib/services/websocketService";
 import { webrtcService } from "@/lib/services/webrtcService";
-import { callApi } from "@/lib/api/callApi";
 
 export function VideoCallScreen() {
   const { call, endCall } = useApp();
@@ -19,11 +17,11 @@ export function VideoCallScreen() {
   useEffect(() => {
     if (!isActive) return;
 
-    const local = webrtcService.getLocalStream();
-
-    if (localVideoRef.current && local) {
-      localVideoRef.current.srcObject = local;
-    }
+    webrtcService.setOnLocalStream((stream) => {
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
+    });
 
     webrtcService.setOnRemoteStream((stream) => {
       if (remoteVideoRef.current) {
@@ -41,17 +39,6 @@ export function VideoCallScreen() {
   if (!isActive) return null;
 
   const t = `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-
-  const hangUp = () => {
-    websocketService.sendSignal({
-      callId: call.callId,
-      receiverId: Number(call.peer.id),
-      type: "CALL_END",
-      payload: "",
-    });
-    callApi.end(call.callId);
-    endCall();
-  };
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
@@ -128,7 +115,7 @@ export function VideoCallScreen() {
           <Monitor className="size-5" />
         </button>
         <button
-          onClick={hangUp}
+          onClick={endCall}
           className="size-14 grid place-items-center rounded-full bg-destructive text-white shadow-elegant hover:scale-105 transition"
         >
           <PhoneOff className="size-6" />

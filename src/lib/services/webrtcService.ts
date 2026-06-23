@@ -6,6 +6,7 @@ class WebRTCService {
   private remoteStream: MediaStream | null = null;
 
   private onRemoteStreamCallback: ((stream: MediaStream) => void) | null = null;
+  private onLocalStreamCallback: ((stream: MediaStream) => void) | null = null;
 
   private pendingCandidates: RTCIceCandidateInit[] = [];
   private activeCallType: CallType | null = null;
@@ -38,6 +39,7 @@ class WebRTCService {
       }
       throw new Error("Could not access camera/microphone. Please check your device.");
     }
+    this.onLocalStreamCallback?.(this.localStream);
     return this.localStream;
   }
 
@@ -123,6 +125,13 @@ class WebRTCService {
 
   setOnRemoteStream(callback: (stream: MediaStream) => void) {
     this.onRemoteStreamCallback = callback;
+  }
+
+  setOnLocalStream(callback: (stream: MediaStream) => void) {
+    this.onLocalStreamCallback = callback;
+    if (this.localStream) {
+      callback(this.localStream);
+    }
   }
 
   setCameraEnabled(on: boolean) {

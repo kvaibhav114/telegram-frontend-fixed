@@ -1,4 +1,4 @@
-export const API_BASE_URL = "https://telegramrepomb-production.up.railway.app";
+export const API_BASE_URL = "https://telegramrepomb-production-a9f9.up.railway.app";
 
 const AUTH_TOKEN_KEY = "telegrok.authToken";
 
@@ -35,9 +35,10 @@ export function extractAuthToken(response: unknown): string | null {
 
 export async function apiFetch<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = getAuthToken();
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const res = await fetch(`${API_BASE_URL}${endpoint}`, {
     headers: {
-      "Content-Type": "application/json",
+      ...(!isFormData ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
@@ -47,6 +48,16 @@ export async function apiFetch<T = unknown>(endpoint: string, options: RequestIn
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw new Error(body?.message || body?.error || `HTTP ${res.status}`);
+  }
+
+  if (res.status === 204) {
+    return null as T;
+  }
+
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    const text = await res.text();
+    return (text ? text : null) as T;
   }
 
   return res.json();

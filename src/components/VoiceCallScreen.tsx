@@ -1,9 +1,7 @@
 import { Mic, MicOff, PhoneOff, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/context/AppContext";
-import { websocketService } from "@/lib/services/websocketService";
 import { webrtcService } from "@/lib/services/webrtcService";
-import { callApi } from "@/lib/api/callApi";
 
 function useTimer(active: boolean) {
   const [s, setS] = useState(0);
@@ -40,17 +38,6 @@ export function VoiceCallScreen() {
   }, [isActive, speaker]);
 
   if (!isActive) return null;
-
-  const hangUp = () => {
-    websocketService.sendSignal({
-      callId: call.callId,
-      receiverId: Number(call.peer.id),
-      type: "CALL_END",
-      payload: "",
-    });
-    callApi.end(call.callId);
-    endCall();
-  };
 
   return (
     <div className="fixed inset-0 z-50 bg-linear-to-br from-[#0b1a2c] via-[#0e1621] to-[#17212B] flex flex-col">
@@ -90,7 +77,7 @@ export function VoiceCallScreen() {
           {muted ? <MicOff className="size-5" /> : <Mic className="size-5" />}
         </button>
         <button
-          onClick={hangUp}
+          onClick={endCall}
           className="size-16 grid place-items-center rounded-full bg-destructive text-white shadow-elegant hover:scale-105 transition"
         >
           <PhoneOff className="size-6" />

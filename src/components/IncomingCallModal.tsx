@@ -1,36 +1,22 @@
 import { Phone, PhoneOff, Video } from "lucide-react";
 import { useState } from "react";
 import { useApp } from "@/context/AppContext";
-import { websocketService } from "@/lib/services/websocketService";
-import { callApi } from "@/lib/api/callApi";
 
 export function IncomingCallModal() {
-  const { call, acceptCall, endCall } = useApp();
+  const { call, acceptCall, rejectCall } = useApp();
   const [busy, setBusy] = useState(false);
   if (call.state !== "incoming") return null;
 
   const reject = () => {
     if (busy) return;
     setBusy(true);
-    callApi.reject(call.callId).finally(() => {
-      websocketService.sendSignal({
-        callId: call.callId, receiverId: Number(call.peer.id),
-        type: "CALL_REJECT", payload: "",
-      });
-      endCall();
-    });
+    rejectCall();
   };
 
   const accept = () => {
     if (busy) return;
     setBusy(true);
-    callApi.accept(call.callId).finally(() => {
-      websocketService.sendSignal({
-        callId: call.callId, receiverId: Number(call.peer.id),
-        type: "CALL_ACCEPT", payload: "",
-      });
-      acceptCall();
-    });
+    acceptCall();
   };
 
   return (

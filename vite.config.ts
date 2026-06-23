@@ -7,6 +7,17 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
+  vite: {
+    server: {
+      watch: {
+        // This repo is running in an environment that regularly exhausts Linux
+        // inotify watchers. Polling is slower, but it avoids dev-server crashes.
+        usePolling: true,
+        interval: 1000,
+        ignored: ["**/dist/**", "**/.git/**"],
+      },
+    },
+  },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this

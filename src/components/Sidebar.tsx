@@ -1,10 +1,14 @@
-import { Link, useNavigate, useParams, useRouterState } from "@tanstack/react-router";
-import { Search, Bell, Settings, Edit, Loader2, Users } from "lucide-react";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { Search, Bell, Settings, Edit, Loader2, Users, AlertCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "@/context/AppContext";
 import { cn } from "@/lib/utils";
-import type { User } from "@/lib/types";
+import { storyApi } from "@/lib/api/storyApi";
+import type { StoryFeedItem, User } from "@/lib/types";
 import { CreateGroupModal } from "./CreateGroupModal";
+import { StoriesBar } from "./StoriesBar";
+import { StoryUploadModal } from "./StoryUploadModal";
+import { StoryViewer } from "./StoryViewer";
 
 export function Sidebar() {
   const { user, chats, searchUsers, openChatWithUser, unreadNotifCount } = useApp();
@@ -12,6 +16,11 @@ export function Sidebar() {
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<User[]>([]);
   const [showNewGroup, setShowNewGroup] = useState(false);
+  const [stories, setStories] = useState<StoryFeedItem[]>([]);
+  const [storiesLoading, setStoriesLoading] = useState(false);
+  const [storiesError, setStoriesError] = useState("");
+  const [showStoryUpload, setShowStoryUpload] = useState(false);
+  const [viewerState, setViewerState] = useState<{ groupIndex: number; storyIndex: number } | null>(null);
   const params = useParams({ strict: false }) as { id?: string };
   const navigate = useNavigate();
 
@@ -19,6 +28,24 @@ export function Sidebar() {
     () => chats.filter((c) => c.title.toLowerCase().includes(q.toLowerCase())),
     [chats, q],
   );
+  const myStoryGroup = useMemo(
+    () => stories.find((group) => String(group.userId) === user.id),
+    [stories, user.id],
+  );
+
+  const loadStories = async () => {
+    if (!user.id || user.id === "0") return;
+    setStoriesLoading(true);
+    try {
+      const feed = await storyApi.getFeed();
+      setStories(feed);
+      setStoriesError("");
+    } catch (err) {
+      setStoriesError(err instanceof Error ? err.message : "Failed to load stories.");
+    } finally {
+      setStoriesLoading(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -31,10 +58,22 @@ export function Sidebar() {
     return () => { active = false; clearTimeout(handle); };
   }, [q, searchUsers]);
 
+  useEffect(() => {
+    void loadStories();
+  }, [user.id]);
+
   const openResult = async (peer: User) => {
     const chat = await openChatWithUser(peer);
     setQ("");
     navigate({ to: "/chat/$id", params: { id: chat.id } });
+  };
+
+  const openStoryViewer = (group: StoryFeedItem) => {
+    const groupIndex = stories.findIndex((item) => item.userId === group.userId);
+    if (groupIndex >= 0) {
+      const firstUnseenIndex = group.stories.findIndex((story) => !story.viewed);
+      setViewerState({ groupIndex, storyIndex: firstUnseenIndex >= 0 ? firstUnseenIndex : 0 });
+    }
   };
 
   return (
@@ -96,6 +135,25 @@ export function Sidebar() {
         )}
       </div>
 
+      <StoriesBar
+        stories={stories}
+        currentUserId={user.id}
+        loading={storiesLoading}
+        onOpenMyStory={() => setShowStoryUpload(true)}
+        onOpenMyViewer={() => {
+          if (myStoryGroup) openStoryViewer(myStoryGroup);
+        }}
+        onOpenViewer={openStoryViewer}
+      />
+      {storiesError && (
+        <div className="mx-2.5 mb-2 rounded-lg border border-destructive/30 bg-destructive/10 px-2.5 py-2 text-[11px] text-destructive">
+          <div className="flex items-center gap-1.5">
+            <AlertCircle className="size-3.5" />
+            <span>{storiesError}</span>
+          </div>
+        </div>
+      )}
+
       {/* Chat list */}
       <div className="flex-1 overflow-y-auto scrollbar-thin px-1.5 pb-2 space-y-px">
         {visibleChats.map((c) => {
@@ -147,6 +205,25 @@ export function Sidebar() {
       </div>
 
       {showNewGroup && <CreateGroupModal onClose={() => setShowNewGroup(false)} />}
+      <StoryUploadModal
+        open={showStoryUpload}
+        onClose={() => setShowStoryUpload(false)}
+        onUploaded={loadStories}
+        myStoryGroup={myStoryGroup}
+        onViewExisting={myStoryGroup ? () => {
+          setShowStoryUpload(false);
+          openStoryViewer(myStoryGroup);
+        } : undefined}
+      />
+      <StoryViewer
+        open={viewerState !== null}
+        groups={stories}
+        initialGroupIndex={viewerState?.groupIndex ?? 0}
+        initialStoryIndex={viewerState?.storyIndex ?? 0}
+        currentUserId={user.id}
+        onClose={() => setViewerState(null)}
+        onStoriesChanged={loadStories}
+      />
     </aside>
   );
 }

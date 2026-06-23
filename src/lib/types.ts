@@ -77,6 +77,38 @@ export interface Notification {
   createdAt: string;
 }
 
+export type StoryMediaType = "IMAGE" | "VIDEO";
+
+export interface Story {
+  id: number;
+  userId: number;
+  username: string;
+  avatarUrl: string | null;
+  mediaUrl: string;
+  caption: string | null;
+  type: StoryMediaType;
+  createdAt: string;
+  expiresAt: string;
+  viewerCount: number;
+  viewed: boolean;
+}
+
+export interface StoryFeedItem {
+  userId: number;
+  username: string;
+  avatarUrl: string | null;
+  hasUnseenStories: boolean;
+  stories: Story[];
+}
+
+export interface StoryViewerEntry {
+  id: number;
+  username: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  viewedAt: string;
+}
+
 export type CallState =
   | { state: "idle" }
   | { state: "incoming"; peer: User; type: CallType; callId: string }

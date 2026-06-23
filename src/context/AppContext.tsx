@@ -41,6 +41,7 @@ interface AppCtx {
   call: CallState;
   startCall: (peer: User, type: CallType) => Promise<void>;
   acceptCall: () => void;
+  rejectCall: () => void;
   endCall: () => void;
   subscribeChat: (chatId: string, cb: (msgs: Message[]) => void) => () => void;
   sendMessage: (chatId: string, text: string, replyToId?: string) => void;
@@ -141,8 +142,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Call signaling (same as before, simplified)
   useEffect(() => {
     const unsub = websocketService.onSignal(async (msg) => {
-      const p = msg.payload as Record<string, unknown> | undefined;
-      const senderId = Number(msg.senderId ?? p?.callerId ?? 0);
+      const parsePayload = (payload: unknown): Record<string, unknown> | undefined => {
+        if (!payload) return undefined;
+        if (typeof payload === "string") {
+          try {
+            const parsed = JSON.parse(payload) as unknown;
+            return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : undefined;
+          } catch {
+            return undefined;
+          }
+        }
+        return typeof payload === "object" ? (payload as Record<string, unknown>) : undefined;
+      };
+
+      const p = parsePayload(msg.payload);
+      const senderId = Number(msg.senderId ?? p?.callerId ?? p?.senderId ?? 0);
       const callId = String(msg.callId ?? p?.callId ?? "");
       const resolveCallType = (): CallType => {
         if (p?.callType === "VOICE" || p?.callType === "VIDEO") return p.callType as CallType;
@@ -318,6 +332,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       callApi.accept(c.callId).catch(console.error);
       websocketService.sendSignal({ callId: c.callId, receiverId: Number(c.peer.id), type: "CALL_ACCEPT", payload: JSON.stringify({ callType: c.type }) });
       updateCall({ state: "active", peer: c.peer, type: c.type, callId: c.callId });
+    },
+    rejectCall: () => {
+      const c = callRef.current;
+      if (c.state !== "incoming") return;
+      websocketService.sendSignal({ callId: c.callId, receiverId: Number(c.peer.id), type: "CALL_REJECT", payload: JSON.stringify({ callType: c.type }) });
+      callApi.reject(c.callId).catch(console.error);
+      webrtcService.reset(); updateCall({ state: "idle" });
     },
     endCall: () => {
       const c = callRef.current;
