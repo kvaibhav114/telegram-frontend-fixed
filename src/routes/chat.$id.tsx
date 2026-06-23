@@ -17,7 +17,7 @@ function ChatRoute() {
   const { id } = Route.useParams();
   const { getChatById, user } = useApp();
   const [chat, setChat] = useState<Chat | undefined>(() => getChatById(id));
-  const [loading, setLoading] = useState(!chat);
+  const [loading, setLoading] = useState(!getChatById(id));
 
   useEffect(() => {
     const existing = getChatById(id);
@@ -26,6 +26,9 @@ function ChatRoute() {
       setLoading(false);
       return;
     }
+
+    setChat(undefined);
+    setLoading(true);
 
     // Try fetching from API
     (async () => {

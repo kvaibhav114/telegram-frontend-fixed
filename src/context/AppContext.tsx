@@ -295,9 +295,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setChats((prev) => [newChat, ...prev]);
         return newChat;
       } catch {
-        const fallback: Chat = { id: peer.id, type: "PRIVATE", title: peer.displayName, description: "", avatarUrl: peer.avatarUrl, inviteLink: null, members: [], lastMessage: "", lastTime: "", unread: 0, typing: false };
-        setChats((prev) => [fallback, ...prev]);
-        return fallback;
+        const refreshed = await chatApi.getChats();
+        const mapped = refreshed.content.map((c) => mapChatResponse(c, user.id));
+        setChats(mapped);
+        const resolved = mapped.find((c) => c.type === "PRIVATE" && c.members.some((m) => m.userId === peer.id));
+        if (!resolved) {
+          throw new Error("Could not open chat with this user.");
+        }
+        return resolved;
       }
     },
 

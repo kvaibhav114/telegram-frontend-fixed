@@ -63,9 +63,13 @@ export function Sidebar() {
   }, [user.id]);
 
   const openResult = async (peer: User) => {
-    const chat = await openChatWithUser(peer);
-    setQ("");
-    navigate({ to: "/chat/$id", params: { id: chat.id } });
+    try {
+      const chat = await openChatWithUser(peer);
+      setQ("");
+      navigate({ to: "/chat/$id", params: { id: chat.id } });
+    } catch (err) {
+      console.error("Failed to open private chat", err);
+    }
   };
 
   const openStoryViewer = (group: StoryFeedItem) => {
