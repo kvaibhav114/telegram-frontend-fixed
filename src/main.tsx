@@ -5,6 +5,7 @@ import { RouterProvider } from "@tanstack/react-router";
 
 import { router } from "./router";
 import "./styles.css";
+import { ToastProvider } from "./hooks/useToast";
 
 const rootElement = document.getElementById("root");
 
@@ -18,6 +19,8 @@ document.body.className = "dark bg-background text-foreground";
 
 ReactDOM.createRoot(rootElement).render(
   <StrictMode>
-    <RouterProvider router={router} />
-  </StrictMode>,
+    <ToastProvider>
+      <RouterProvider router={router} />
+    </ToastProvider>
+  </StrictMode>
 );
