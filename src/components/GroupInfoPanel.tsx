@@ -1,46 +1,86 @@
-import { X, UserPlus, Link2, LogOut, Search, Loader2, Copy, Check } from "lucide-react";
+import { X, UserPlus, Link2, LogOut, Search, Loader2, Copy, Check, RefreshCw, ShieldCheck, ShieldMinus } from "lucide-react";
 import { useState, useEffect } from "react";
-import type { Chat, User } from "@/lib/types";
+import type { Chat, User, MemberRole } from "@/lib/types";
 import { useApp } from "@/context/AppContext";
+import { useToast } from "@/hooks/useToast";
+import { chatApi } from "@/lib/api/chatApi";
 
 export function GroupInfoPanel({ chat, onClose }: { chat: Chat; onClose: () => void }) {
   const { user, searchUsers, addMemberToChat, removeMemberFromChat } = useApp();
+  const { success, error: showError } = useToast();
   const [showAdd, setShowAdd] = useState(false);
   const [q, setQ] = useState("");
   const [results, setResults] = useState<User[]>([]);
   const [searching, setSearching] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [inviteLink, setInviteLink] = useState(chat.inviteLink);
+  const [regenerating, setRegenerating] = useState(false);
 
   const myRole = chat.members.find((m) => m.userId === user.id)?.role;
-  const canManage = myRole === "OWNER" || myRole === "ADMIN";
+  const isOwner = myRole === "OWNER";
+  const canManage = isOwner || myRole === "ADMIN";
 
   useEffect(() => {
     let active = true;
     const t = setTimeout(async () => {
       if (!q.trim()) { setResults([]); return; }
       setSearching(true);
-      try { const r = await searchUsers(q); if (active) setResults(r.filter((u) => !chat.members.some((m) => m.userId === u.id))); }
-      finally { if (active) setSearching(false); }
+      try {
+        const r = await searchUsers(q);
+        if (active) setResults(r.filter((u) => !chat.members.some((m) => m.userId === u.id)));
+      } finally { if (active) setSearching(false); }
     }, 300);
     return () => { active = false; clearTimeout(t); };
   }, [q]);
 
   const handleAdd = async (u: User) => {
-    try { await addMemberToChat(chat.id, u.id); setQ(""); setShowAdd(false); } catch (e: any) { alert(e.message); }
+    try {
+      await addMemberToChat(chat.id, u.id);
+      setQ(""); setShowAdd(false);
+      success(`${u.displayName} added`);
+    } catch (e: any) { showError(e.message); }
   };
 
   const handleRemove = async (userId: string) => {
     if (!confirm("Remove this member?")) return;
-    try { await removeMemberFromChat(chat.id, userId); } catch (e: any) { alert(e.message); }
+    try { await removeMemberFromChat(chat.id, userId); success("Member removed"); }
+    catch (e: any) { showError(e.message); }
   };
 
   const handleLeave = async () => {
     if (!confirm("Leave this group?")) return;
-    try { await removeMemberFromChat(chat.id, user.id); onClose(); } catch (e: any) { alert(e.message); }
+    try { await removeMemberFromChat(chat.id, user.id); onClose(); }
+    catch (e: any) { showError(e.message); }
   };
 
   const copyInvite = () => {
-    if (chat.inviteLink) { navigator.clipboard.writeText(chat.inviteLink); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+    if (inviteLink) {
+      navigator.clipboard.writeText(inviteLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    setRegenerating(true);
+    try {
+      const resp = await chatApi.regenerateInviteLink(chat.id);
+      setInviteLink(resp.inviteLink);
+      success("Invite link regenerated");
+    } catch (e: any) { showError(e.message); }
+    finally { setRegenerating(false); }
+  };
+
+  // ── Promote / Demote ──────────────────────────────────────────────
+  const handleRoleChange = async (userId: string, newRole: MemberRole) => {
+    const label = newRole === "ADMIN" ? "promoted to Admin" : "demoted to Member";
+    try {
+      await chatApi.changeMemberRole(chat.id, userId, newRole);
+      success(`User ${label}`);
+      // Optimistic update
+      const member = chat.members.find((m) => m.userId === userId);
+      if (member) (member as any).role = newRole;
+    } catch (e: any) { showError(e.message); }
   };
 
   return (
@@ -50,6 +90,7 @@ export function GroupInfoPanel({ chat, onClose }: { chat: Chat; onClose: () => v
         <button onClick={onClose} className="size-8 grid place-items-center rounded-lg hover:bg-accent"><X className="size-4" /></button>
       </div>
 
+      {/* Group avatar & title */}
       <div className="px-4 py-4 text-center border-b border-border">
         {chat.avatarUrl ? (
           <img src={chat.avatarUrl} className="size-20 rounded-full mx-auto object-cover" alt="" />
@@ -61,12 +102,20 @@ export function GroupInfoPanel({ chat, onClose }: { chat: Chat; onClose: () => v
         {chat.description && <div className="text-xs text-muted-foreground mt-1">{chat.description}</div>}
       </div>
 
-      {/* Invite link */}
-      {chat.inviteLink && (
-        <button onClick={copyInvite} className="flex items-center gap-2.5 px-4 py-2.5 border-b border-border hover:bg-accent text-sm">
-          {copied ? <Check className="size-4 text-green-400" /> : <Link2 className="size-4 text-muted-foreground" />}
-          <span className="truncate text-xs">{copied ? "Copied!" : "Copy invite link"}</span>
-        </button>
+      {/* Invite link with copy + regenerate */}
+      {inviteLink && (
+        <div className="flex items-center border-b border-border">
+          <button onClick={copyInvite} className="flex-1 flex items-center gap-2.5 px-4 py-2.5 hover:bg-accent text-sm">
+            {copied ? <Check className="size-4 text-green-400" /> : <Link2 className="size-4 text-muted-foreground" />}
+            <span className="truncate text-xs">{copied ? "Copied!" : "Copy invite link"}</span>
+          </button>
+          {canManage && (
+            <button onClick={handleRegenerate} disabled={regenerating} title="Regenerate invite link"
+              className="size-10 grid place-items-center hover:bg-accent text-muted-foreground border-l border-border">
+              {regenerating ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+            </button>
+          )}
+        </div>
       )}
 
       {/* Members */}
@@ -108,8 +157,31 @@ export function GroupInfoPanel({ chat, onClose }: { chat: Chat; onClose: () => v
                 {m.isOnline ? "online" : "offline"}
               </div>
             </div>
-            {canManage && m.userId !== user.id && m.role === "MEMBER" && (
-              <button onClick={() => handleRemove(m.userId)} className="opacity-0 group-hover:opacity-100 text-xs text-destructive hover:underline">Remove</button>
+
+            {/* Actions for non-self members */}
+            {m.userId !== user.id && (
+              <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition">
+                {/* Promote/Demote — only visible to OWNER */}
+                {isOwner && m.role === "MEMBER" && (
+                  <button onClick={() => handleRoleChange(m.userId, "ADMIN")}
+                    title="Promote to Admin"
+                    className="size-6 grid place-items-center rounded hover:bg-primary/10 text-primary">
+                    <ShieldCheck className="size-3.5" />
+                  </button>
+                )}
+                {isOwner && m.role === "ADMIN" && (
+                  <button onClick={() => handleRoleChange(m.userId, "MEMBER")}
+                    title="Demote to Member"
+                    className="size-6 grid place-items-center rounded hover:bg-yellow-500/10 text-yellow-500">
+                    <ShieldMinus className="size-3.5" />
+                  </button>
+                )}
+                {/* Remove — visible to OWNER/ADMIN for non-admin members */}
+                {canManage && (m.role === "MEMBER" || isOwner) && (
+                  <button onClick={() => handleRemove(m.userId)}
+                    className="text-[10px] text-destructive hover:underline">Remove</button>
+                )}
+              </div>
             )}
           </div>
         ))}
