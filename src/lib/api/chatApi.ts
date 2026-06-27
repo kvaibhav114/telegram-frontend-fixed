@@ -76,12 +76,19 @@ export const chatApi = {
   removeMember: (chatId: number | string, userId: number | string) =>
     apiFetch(`/api/chats/${chatId}/members/${userId}`, { method: "DELETE" }),
 
+  // ── NEW: Promote / Demote ─────────────────────────────────────────
+  changeMemberRole: (chatId: number | string, userId: number | string, newRole: MemberRole) =>
+    apiFetch<{ message: string }>(`/api/chats/${chatId}/members/${userId}/role`, {
+      method: "PUT",
+      body: JSON.stringify({ newRole }),
+    }),
+
   // Invite links
   joinViaInviteLink: (inviteLink: string) =>
-    apiFetch<ChatResponse>(`/api/chats/join/${inviteLink}`, { method: "POST" }),
+    apiFetch<ChatResponse>(`/api/chats/join?inviteLink=${encodeURIComponent(inviteLink)}`, { method: "POST" }),
 
   regenerateInviteLink: (chatId: number | string) =>
-    apiFetch<string>(`/api/chats/${chatId}/invite-link`, { method: "POST" }),
+    apiFetch<{ inviteLink: string }>(`/api/chats/${chatId}/invite-link/regenerate`, { method: "POST" }),
 
   // Pinned messages
   getPinnedMessages: (chatId: number | string) =>

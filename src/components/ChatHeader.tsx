@@ -1,9 +1,11 @@
-import { Phone, Video, Users, Pin, ChevronDown, X } from "lucide-react";
+import { Phone, Video, Users, Pin, X, Ban, ShieldCheck } from "lucide-react";
 import { useState, useEffect } from "react";
-import type { Chat, CallType, PinnedMessage, Message } from "@/lib/types";
+import type { Chat, CallType, PinnedMessage } from "@/lib/types";
 import type { PinnedMessageResponse } from "@/lib/api/chatApi";
 import { useApp } from "@/context/AppContext";
+import { useToast } from "@/hooks/useToast";
 import { chatApi } from "@/lib/api/chatApi";
+import { userApi } from "@/lib/api/userApi";
 
 function toPinnedMsg(r: PinnedMessageResponse): PinnedMessage {
   return {
@@ -12,8 +14,7 @@ function toPinnedMsg(r: PinnedMessageResponse): PinnedMessage {
       id: String(r.message.id), chatId: String(r.message.chatId), senderId: String(r.message.senderId),
       senderName: r.message.senderName ?? "", senderAvatarUrl: r.message.senderAvatarUrl ?? "",
       type: r.message.type ?? "TEXT", content: r.message.content ?? "",
-      replyToId: null, replyToContent: null, isEdited: false,
-      createdAt: r.message.createdAt ?? "", status: "sent",
+      replyToId: null, replyToContent: null, isEdited: false, createdAt: r.message.createdAt ?? "", status: "sent",
     },
     pinnedById: r.pinnedById, pinnedByName: r.pinnedByName, pinnedAt: r.pinnedAt,
   };
@@ -21,17 +22,32 @@ function toPinnedMsg(r: PinnedMessageResponse): PinnedMessage {
 
 export function ChatHeader({ chat, onInfo }: { chat: Chat; onInfo?: () => void }) {
   const { user, startCall, unpinMessage } = useApp();
+  const { success, error: showError } = useToast();
   const [pins, setPins] = useState<PinnedMessage[]>([]);
   const [showPins, setShowPins] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  const [blockLoading, setBlockLoading] = useState(false);
+
+  const isGroup = chat.type !== "PRIVATE";
+  const onlineCount = chat.members.filter((m) => m.isOnline).length;
+  const otherMember = chat.members.find((m) => m.userId !== user.id);
 
   useEffect(() => {
     chatApi.getPinnedMessages(chat.id).then((r) => setPins(r.map(toPinnedMsg))).catch(() => {});
+    // Check block status for private chats
+    if (!isGroup && otherMember) {
+      userApi.getBlockedUsers().then((list) => {
+        setBlocked(list.some((u) => String(u.id) === otherMember.userId));
+      }).catch(() => {});
+    }
   }, [chat.id]);
 
   const callPeer = (type: CallType) => {
-    const other = chat.members.find((m) => m.userId !== user.id);
-    if (!other) return;
-    void startCall({ id: other.userId, username: other.username, displayName: other.displayName, email: "", bio: "", avatarUrl: other.avatarUrl, isOnline: other.isOnline, lastSeenAt: null }, type);
+    if (!otherMember) return;
+    void startCall({
+      id: otherMember.userId, username: otherMember.username, displayName: otherMember.displayName,
+      email: "", bio: "", avatarUrl: otherMember.avatarUrl, isOnline: otherMember.isOnline, lastSeenAt: null,
+    }, type);
   };
 
   const handleUnpin = async (pin: PinnedMessage) => {
@@ -39,8 +55,22 @@ export function ChatHeader({ chat, onInfo }: { chat: Chat; onInfo?: () => void }
     setPins((p) => p.filter((pp) => pp.id !== pin.id));
   };
 
-  const isGroup = chat.type !== "PRIVATE";
-  const onlineCount = chat.members.filter((m) => m.isOnline).length;
+  const handleToggleBlock = async () => {
+    if (!otherMember) return;
+    setBlockLoading(true);
+    try {
+      if (blocked) {
+        await userApi.unblockUser(otherMember.userId);
+        setBlocked(false);
+        success("User unblocked");
+      } else {
+        await userApi.blockUser(otherMember.userId);
+        setBlocked(true);
+        success("User blocked — messages and calls are now restricted");
+      }
+    } catch (e: any) { showError(e.message || "Failed"); }
+    finally { setBlockLoading(false); }
+  };
 
   return (
     <div className="border-b border-border">
@@ -56,9 +86,13 @@ export function ChatHeader({ chat, onInfo }: { chat: Chat; onInfo?: () => void }
           <div className="text-left min-w-0">
             <div className="text-sm font-semibold truncate">{chat.title}</div>
             <div className="text-[11px] text-muted-foreground truncate">
-              {isGroup ? `${chat.members.length} members, ${onlineCount} online`
-                : chat.typing ? "typing…"
-                : chat.members.find((m) => m.userId !== user.id)?.isOnline ? "online" : "offline"}
+              {isGroup
+                ? `${chat.members.length} members, ${onlineCount} online`
+                : blocked
+                  ? "blocked"
+                  : chat.typing
+                    ? "typing…"
+                    : otherMember?.isOnline ? "online" : "offline"}
             </div>
           </div>
         </button>
@@ -68,17 +102,33 @@ export function ChatHeader({ chat, onInfo }: { chat: Chat; onInfo?: () => void }
             <button onClick={() => setShowPins((s) => !s)}
               className="size-9 grid place-items-center rounded-lg hover:bg-accent text-muted-foreground hover:text-primary transition relative">
               <Pin className="size-4" />
-              <span className="absolute -top-0.5 -right-0.5 size-4 text-[9px] font-bold bg-primary text-primary-foreground rounded-full grid place-items-center">{pins.length}</span>
+              <span className="absolute -top-0.5 -right-0.5 size-4 text-[9px] font-bold bg-primary text-primary-foreground rounded-full grid place-items-center">
+                {pins.length}
+              </span>
             </button>
           )}
           {!isGroup && (
             <>
-              <button onClick={() => callPeer("VOICE")} className="size-9 grid place-items-center rounded-lg hover:bg-accent text-muted-foreground hover:text-primary transition"><Phone className="size-4" /></button>
-              <button onClick={() => callPeer("VIDEO")} className="size-9 grid place-items-center rounded-lg hover:bg-accent text-muted-foreground hover:text-primary transition"><Video className="size-4" /></button>
+              <button onClick={() => callPeer("VOICE")} disabled={blocked}
+                className="size-9 grid place-items-center rounded-lg hover:bg-accent text-muted-foreground hover:text-primary transition disabled:opacity-30">
+                <Phone className="size-4" />
+              </button>
+              <button onClick={() => callPeer("VIDEO")} disabled={blocked}
+                className="size-9 grid place-items-center rounded-lg hover:bg-accent text-muted-foreground hover:text-primary transition disabled:opacity-30">
+                <Video className="size-4" />
+              </button>
+              {/* Block / Unblock button */}
+              <button onClick={handleToggleBlock} disabled={blockLoading}
+                title={blocked ? "Unblock user" : "Block user"}
+                className={`size-9 grid place-items-center rounded-lg hover:bg-accent transition ${blocked ? "text-destructive" : "text-muted-foreground hover:text-destructive"}`}>
+                {blocked ? <ShieldCheck className="size-4" /> : <Ban className="size-4" />}
+              </button>
             </>
           )}
           {isGroup && (
-            <button onClick={onInfo} className="size-9 grid place-items-center rounded-lg hover:bg-accent text-muted-foreground transition"><Users className="size-4" /></button>
+            <button onClick={onInfo} className="size-9 grid place-items-center rounded-lg hover:bg-accent text-muted-foreground transition">
+              <Users className="size-4" />
+            </button>
           )}
         </div>
       </div>
@@ -94,7 +144,9 @@ export function ChatHeader({ chat, onInfo }: { chat: Chat; onInfo?: () => void }
                 <span className="text-muted-foreground"> pinned: </span>
                 <span className="truncate">{pin.message.content}</span>
               </div>
-              <button onClick={() => handleUnpin(pin)} className="size-6 grid place-items-center rounded hover:bg-accent shrink-0"><X className="size-3" /></button>
+              <button onClick={() => handleUnpin(pin)} className="size-6 grid place-items-center rounded hover:bg-accent shrink-0">
+                <X className="size-3" />
+              </button>
             </div>
           ))}
         </div>

@@ -1,3 +1,4 @@
+
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { ChatWindow } from "@/components/ChatWindow";
@@ -5,6 +6,7 @@ import { useApp } from "@/context/AppContext";
 import { useEffect, useState } from "react";
 import type { Chat } from "@/lib/types";
 import { chatApi } from "@/lib/api/chatApi";
+import { mapChat } from "@/lib/mappers";
 
 export const Route = createFileRoute("/chat/$id")({
   component: ChatRoute,
@@ -30,37 +32,11 @@ function ChatRoute() {
     setChat(undefined);
     setLoading(true);
 
-    // Try fetching from API
     (async () => {
       try {
         const resp = await chatApi.getChatById(id);
-        const other = resp.type === "PRIVATE"
-          ? resp.members.find((m) => String(m.userId) !== user.id)
-          : null;
-
-        setChat({
-          id: String(resp.id),
-          type: resp.type,
-          title: resp.type === "PRIVATE" ? (other?.displayName ?? "Unknown") : (resp.title ?? "Group"),
-          description: resp.description ?? "",
-          avatarUrl: resp.type === "PRIVATE"
-            ? (other?.avatarUrl ?? `https://i.pravatar.cc/150?u=${other?.userId}`)
-            : (resp.avatarUrl ?? ""),
-          members: resp.members.map((m) => ({
-            userId: String(m.userId),
-            username: m.username,
-            displayName: m.displayName,
-            avatarUrl: m.avatarUrl ?? "",
-            role: m.role,
-            isOnline: m.isOnline,
-          })),
-          lastMessage: resp.lastMessage?.content ?? "",
-          lastTime: resp.lastMessage?.createdAt
-            ? new Date(resp.lastMessage.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-            : "",
-          unread: resp.unreadCount ?? 0,
-          typing: false,
-        });
+        // FIXED: Was 25 lines of inline mapping. Now one line.
+        setChat(mapChat(resp, user.id));
       } catch {
         setChat(undefined);
       } finally {
@@ -77,10 +53,8 @@ function ChatRoute() {
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
-      <Link
-        to="/chat"
-        className="md:hidden inline-flex items-center gap-2 text-sm px-4 py-2 text-muted-foreground hover:text-foreground"
-      >
+      <Link to="/chat"
+        className="md:hidden inline-flex items-center gap-2 text-sm px-4 py-2 text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" /> Back
       </Link>
       <ChatWindow chat={chat} />
