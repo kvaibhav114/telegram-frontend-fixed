@@ -1,4 +1,11 @@
-import { ChevronLeft, ChevronRight, Eye, Loader2, Trash2, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Loader2,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { fetchStoryMediaByIdObjectUrl, storyApi } from "@/lib/api/storyApi";
 import { cn } from "@/lib/utils";
@@ -44,7 +51,10 @@ function StoryViewersModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[90] grid place-items-center bg-black/70 backdrop-blur-sm"
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-md mx-4 overflow-hidden rounded-2xl border border-border bg-card shadow-elegant"
         onClick={(event) => event.stopPropagation()}
@@ -52,9 +62,14 @@ function StoryViewersModal({
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div>
             <h3 className="text-sm font-semibold">Story viewers</h3>
-            <p className="text-xs text-muted-foreground">People who have seen this story.</p>
+            <p className="text-xs text-muted-foreground">
+              People who have seen this story.
+            </p>
           </div>
-          <button onClick={onClose} className="grid size-8 place-items-center rounded-lg hover:bg-accent">
+          <button
+            onClick={onClose}
+            className="grid size-8 place-items-center rounded-lg hover:bg-accent"
+          >
             <X className="size-4" />
           </button>
         </div>
@@ -65,25 +80,44 @@ function StoryViewersModal({
               <Loader2 className="size-5 animate-spin" />
             </div>
           ) : error ? (
-            <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>
+            <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
+            </div>
           ) : viewers.length === 0 ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">No viewers yet.</div>
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              No viewers yet.
+            </div>
           ) : (
             <div className="space-y-1.5">
               {viewers.map((viewer) => (
-                <div key={viewer.id} className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-accent/70">
+                <div
+                  key={viewer.id}
+                  className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-accent/70"
+                >
                   {viewer.avatarUrl ? (
-                    <img src={viewer.avatarUrl} alt="" className="size-10 rounded-full object-cover" />
+                    <img
+                      src={viewer.avatarUrl}
+                      alt=""
+                      className="size-10 rounded-full object-cover"
+                    />
                   ) : (
                     <div className="grid size-10 place-items-center rounded-full bg-primary/15 text-sm font-semibold text-primary">
-                      {(viewer.displayName ?? viewer.username ?? "?").charAt(0).toUpperCase()}
+                      {(viewer.displayName ?? viewer.username ?? "?")
+                        .charAt(0)
+                        .toUpperCase()}
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{viewer.displayName ?? viewer.username}</div>
-                    <div className="truncate text-xs text-muted-foreground">@{viewer.username}</div>
+                    <div className="truncate text-sm font-medium">
+                      {viewer.displayName ?? viewer.username}
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      @{viewer.username}
+                    </div>
                   </div>
-                  <div className="shrink-0 text-[11px] text-muted-foreground">{formatTimestamp(viewer.viewedAt)}</div>
+                  <div className="shrink-0 text-[11px] text-muted-foreground">
+                    {formatTimestamp(viewer.viewedAt)}
+                  </div>
                 </div>
               ))}
             </div>
@@ -106,7 +140,9 @@ export function StoryViewer({
   const [groupIndex, setGroupIndex] = useState(initialGroupIndex);
   const [storyIndex, setStoryIndex] = useState(initialStoryIndex);
   const [progress, setProgress] = useState(0);
-  const [videoDurationMs, setVideoDurationMs] = useState(VIDEO_STORY_FALLBACK_MS);
+  const [videoDurationMs, setVideoDurationMs] = useState(
+    VIDEO_STORY_FALLBACK_MS,
+  );
   const [deleting, setDeleting] = useState(false);
   const [viewersOpen, setViewersOpen] = useState(false);
   const [viewersLoading, setViewersLoading] = useState(false);
@@ -136,8 +172,14 @@ export function StoryViewer({
   const activeGroup = groups[groupIndex];
   const activeStory = activeGroup?.stories[storyIndex];
 
-  const isOwner = activeStory ? String(activeStory.userId) === currentUserId : false;
-  const totalDurationMs = activeStory?.type === "VIDEO" ? videoDurationMs : IMAGE_STORY_DURATION_MS;
+  const isOwner = activeStory
+    ? String(activeStory.userId) === currentUserId
+    : false;
+  const totalDurationMs =
+    activeStory?.type === "VIDEO" ? videoDurationMs : IMAGE_STORY_DURATION_MS;
+
+    const durationRef = useRef(totalDurationMs);
+useEffect(() => { durationRef.current = totalDurationMs; }, [totalDurationMs]);
 
   const goToNext = () => {
     if (!activeGroup) return;
@@ -188,25 +230,25 @@ export function StoryViewer({
   }, [open, activeStory, isOwner]);
 
   useEffect(() => {
-    if (!open || !activeStory) return;
-    setProgress(0);
+  if (!open || !activeStory || mediaLoading) return; 
+  setProgress(0);
 
-    const startedAt = performance.now();
-    let frameId = 0;
+  const startedAt = performance.now();
+  let frameId = 0;
 
-    const tick = (now: number) => {
-      const nextProgress = Math.min((now - startedAt) / totalDurationMs, 1);
-      setProgress(nextProgress);
-      if (nextProgress >= 1) {
-        goToNext();
-        return;
-      }
-      frameId = window.requestAnimationFrame(tick);
-    };
-
+  const tick = (now: number) => {
+    const nextProgress = Math.min((now - startedAt) / durationRef.current, 1);
+    setProgress(nextProgress);
+    if (nextProgress >= 1) {
+      goToNext();
+      return;
+    }
     frameId = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(frameId);
-  }, [open, activeStory?.id, totalDurationMs]);
+  };
+
+  frameId = window.requestAnimationFrame(tick);
+  return () => window.cancelAnimationFrame(frameId);
+}, [open, activeStory?.id, mediaLoading]); 
 
   useEffect(() => {
     if (!open || !activeStory) return;
@@ -228,7 +270,9 @@ export function StoryViewer({
       })
       .catch((err) => {
         if (!alive) return;
-        setMediaError(err instanceof Error ? err.message : "Failed to load story media.");
+        setMediaError(
+          err instanceof Error ? err.message : "Failed to load story media.",
+        );
       })
       .finally(() => {
         if (alive) setMediaLoading(false);
@@ -278,7 +322,9 @@ export function StoryViewer({
       const response = await storyApi.getViewers(activeStory.id);
       setViewers(response);
     } catch (err) {
-      setViewersError(err instanceof Error ? err.message : "Failed to load viewers.");
+      setViewersError(
+        err instanceof Error ? err.message : "Failed to load viewers.",
+      );
     } finally {
       setViewersLoading(false);
     }
@@ -291,37 +337,57 @@ export function StoryViewer({
       <div className="fixed inset-0 z-[80] bg-black/95 text-white">
         <div className="absolute inset-x-0 top-0 z-10 p-4">
           <div className="mb-3 flex gap-1.5">
-            {activeGroup.stories.map((story, index) => (
-              <div key={story.id} className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/20">
+            {activeGroup.stories.map((story, index) => {
+              const isActive = index === storyIndex;
+              const isPast = index < storyIndex;
+              return (
                 <div
-                  className={cn(
-                    "h-full rounded-full bg-white transition-[width]",
-                    index === storyIndex ? "duration-100" : "duration-300",
-                  )}
-                  style={{
-                    width:
-                      index < storyIndex ? "100%" :
-                      index === storyIndex ? `${Math.max(progress * 100, 3)}%` :
-                      "0%",
-                  }}
-                />
-              </div>
-            ))}
+                  key={story.id}
+                  className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/20"
+                >
+                  <div
+                    className={cn(
+                      "h-full rounded-full bg-white",
+                      // Only animate the bars that are SNAPPING (past/future), not the active one.
+                      !isActive && "transition-[width] duration-300",
+                    )}
+                    style={{
+                      width: isPast
+                        ? "100%"
+                        : isActive
+                          ? `${progress * 100}%`
+                          : "0%",
+                    }}
+                  />
+                </div>
+              );
+            })}
           </div>
 
           <div className="flex items-center gap-3">
             {activeGroup.avatarUrl ? (
-              <img src={activeGroup.avatarUrl} alt="" className="size-10 rounded-full object-cover" />
+              <img
+                src={activeGroup.avatarUrl}
+                alt=""
+                className="size-10 rounded-full object-cover"
+              />
             ) : (
               <div className="grid size-10 place-items-center rounded-full bg-white/15 text-sm font-semibold">
                 {activeGroup.username.charAt(0).toUpperCase()}
               </div>
             )}
             <div className="min-w-0">
-              <div className="truncate text-sm font-medium">{activeGroup.username}</div>
-              <div className="text-xs text-white/70">{formatTimestamp(activeStory.createdAt)}</div>
+              <div className="truncate text-sm font-medium">
+                {activeGroup.username}
+              </div>
+              <div className="text-xs text-white/70">
+                {formatTimestamp(activeStory.createdAt)}
+              </div>
             </div>
-            <button onClick={onClose} className="ml-auto grid size-9 place-items-center rounded-full bg-white/10 hover:bg-white/20">
+            <button
+              onClick={onClose}
+              className="ml-auto grid size-9 place-items-center rounded-full bg-white/10 hover:bg-white/20"
+            >
               <X className="size-4" />
             </button>
           </div>
@@ -367,7 +433,11 @@ export function StoryViewer({
                 onEnded={goToNext}
               />
             ) : (
-              <img src={mediaObjectUrl} alt={activeStory.caption ?? "Story"} className="h-full w-full object-contain" />
+              <img
+                src={mediaObjectUrl}
+                alt={activeStory.caption ?? "Story"}
+                className="h-full w-full object-contain"
+              />
             )}
           </div>
         </div>
@@ -375,7 +445,11 @@ export function StoryViewer({
         {(activeStory.caption || isOwner) && (
           <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black via-black/70 to-transparent px-4 pb-5 pt-14">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
-              {activeStory.caption && <p className="max-w-2xl text-sm text-white/90">{activeStory.caption}</p>}
+              {activeStory.caption && (
+                <p className="max-w-2xl text-sm text-white/90">
+                  {activeStory.caption}
+                </p>
+              )}
 
               {isOwner && (
                 <div className="flex flex-wrap items-center gap-2">
@@ -385,14 +459,20 @@ export function StoryViewer({
                   >
                     <Eye className="size-3.5" />
                     View viewers
-                    <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px]">{activeStory.viewerCount}</span>
+                    <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px]">
+                      {activeStory.viewerCount}
+                    </span>
                   </button>
                   <button
                     onClick={() => void handleDelete()}
                     disabled={deleting}
                     className="inline-flex items-center gap-2 rounded-full bg-destructive/80 px-3 py-2 text-xs font-medium text-white hover:bg-destructive disabled:opacity-60"
                   >
-                    {deleting ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                    {deleting ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-3.5" />
+                    )}
                     Delete story
                   </button>
                 </div>
