@@ -22,3 +22,22 @@ export function formatLocalDateTime(iso: string | null | undefined): string {
       })
     : "";
 }
+
+export function formatDateDivider(iso: string | null | undefined): string | null {
+  const d = parseBackendDate(iso);
+  if (!d) return null;
+  const now = new Date();
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / 86_400_000);
+  if (diffDays <= 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return d.toLocaleDateString([], { weekday: "long" });
+  return d.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" });
+}
+
+/** Stable per-day key used to group consecutive messages. */
+export function localDayKey(iso: string | null | undefined): string {
+  const d = parseBackendDate(iso);
+  if (!d) return "";
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}

@@ -18,8 +18,8 @@ export const Route = createFileRoute("/register")({
 
 function RegisterPage() {
   const nav = useNavigate();
-  const [emoji, setEmoji] = useState("🚀");
-  const [name, setName] = useState("Vaibhav");
+  const [emoji, setEmoji] = useState(""); 
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [pwd, setPwd] = useState("");
   const [pwd2, setPwd2] = useState("");
@@ -79,7 +79,7 @@ const submit = async (e: React.FormEvent) => {
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold tracking-tight">Create your account</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Pick a username — drop an emoji in it ✨
+            Pick a username — drop an emoji in it 
           </p>
         </div>
 
@@ -135,7 +135,7 @@ const submit = async (e: React.FormEvent) => {
                 />
               </div>
             )}
-            <div className="mt-2 flex gap-1.5 flex-wrap">
+            {/* <div className="mt-2 flex gap-1.5 flex-wrap">
               {["🚀", "🔥", "🎮", "🐱", "🌸", "⚡", "🎧", "🎓"].map((e) => (
                 <button
                   type="button"
@@ -148,7 +148,7 @@ const submit = async (e: React.FormEvent) => {
                   {e}
                 </button>
               ))}
-            </div>
+            </div> */}
           </label>
 
           <Field icon={Mail} label="Email" value={email} onChange={setEmail} placeholder="you@email.com" type="email" required />

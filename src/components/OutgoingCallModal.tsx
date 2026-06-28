@@ -2,7 +2,8 @@ import { Phone, PhoneOff, Video } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApp } from "@/context/AppContext";
 
-const RING_TIMEOUT_MS = 45_000;
+
+const RING_TIMEOUT_MS = 33_000;
 
 export function OutgoingCallModal() {
   const { call, endCall } = useApp();

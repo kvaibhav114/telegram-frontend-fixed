@@ -1,7 +1,20 @@
-
-
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import type { User, Chat, Message, CallState, CallType, Notification, ChatType } from "@/lib/types";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import type {
+  User,
+  Chat,
+  Message,
+  CallState,
+  CallType,
+  Notification,
+  ChatType,
+} from "@/lib/types";
 import { getAuthToken } from "@/lib/api/apiClient";
 import { userApi } from "@/lib/api/userApi";
 import { chatApi } from "@/lib/api/chatApi";
@@ -13,7 +26,16 @@ import { useCallSignaling } from "@/hooks/useCalls";
 import { useChatState } from "@/hooks/useChats";
 import { useMessageState } from "@/hooks/useMessages";
 
-const EMPTY_USER: User = { id: "0", username: "", displayName: "Loading...", email: "", bio: "", avatarUrl: "", isOnline: false, lastSeenAt: null };
+const EMPTY_USER: User = {
+  id: "0",
+  username: "",
+  displayName: "Loading...",
+  email: "",
+  bio: "",
+  avatarUrl: "",
+  isOnline: false,
+  lastSeenAt: null,
+};
 
 export interface AppCtx {
   user: User;
@@ -40,7 +62,12 @@ export interface AppCtx {
   deleteMessage: (messageId: string, chatId: string) => Promise<void>;
   pinMessage: (chatId: string, messageId: string) => Promise<void>;
   unpinMessage: (chatId: string, messageId: string) => Promise<void>;
-  createGroup: (type: ChatType, title: string, memberIds: number[], description?: string) => Promise<Chat>;
+  createGroup: (
+    type: ChatType,
+    title: string,
+    memberIds: number[],
+    description?: string,
+  ) => Promise<Chat>;
   addMemberToChat: (chatId: string, userId: string) => Promise<void>;
   removeMemberFromChat: (chatId: string, userId: string) => Promise<void>;
   markNotificationsRead: () => void;
@@ -55,7 +82,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const userRef = useRef(user);
-  useEffect(() => { userRef.current = user; }, [user]);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   const upsertUser = (u: User) => setUsers((prev) => ({ ...prev, [u.id]: u }));
 
@@ -73,30 +102,62 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         const me = mapUser(await userApi.getMe());
         if (!alive) return;
-        setUser(me); upsertUser(me);
+        setUser(me);
+        upsertUser(me);
 
         const chatPage = await chatApi.getChats();
         if (!alive) return;
         chatState.setChats(chatPage.content.map((c) => mapChat(c, me.id)));
 
-        try { setUnreadNotifCount(await notificationApi.countUnread()); } catch {}
+        try {
+          setUnreadNotifCount(await notificationApi.countUnread());
+        } catch {}
 
         websocketService.connect(Number(me.id), token);
-      } catch (err) { console.error("Failed to load initial data", err); }
+      } catch (err) {
+        console.error("Failed to load initial data", err);
+      }
     })();
 
     const onTokenChange = () => websocketService.reconnect();
     window.addEventListener("telegrok-auth-token-changed", onTokenChange);
-    return () => { alive = false; window.removeEventListener("telegrok-auth-token-changed", onTokenChange); websocketService.disconnect(); webrtcService.reset(); };
+    return () => {
+      alive = false;
+      window.removeEventListener("telegrok-auth-token-changed", onTokenChange);
+      websocketService.disconnect();
+      webrtcService.reset();
+    };
   }, []);
 
   // Notification WebSocket
-  useEffect(() => websocketService.onNotification(() => setUnreadNotifCount((c) => c + 1)), []);
+  useEffect(
+    () =>
+      websocketService.onNotification(() => setUnreadNotifCount((c) => c + 1)),
+    [],
+  );
+
+  // Per-user chat events: when the server says the user has been added to a
+  // chat (added by an admin, or after joinViaInviteLink in another tab),
+  // prepend it to the sidebar live.
+  useEffect(
+    () =>
+      websocketService.onChatEvent((event) => {
+        if (event.type === "ADDED_TO_CHAT" && event.payload) {
+          const newChat = mapChat(event.payload as any, userRef.current.id);
+          chatState.setChats((prev) =>
+            prev.some((c) => c.id === newChat.id) ? prev : [newChat, ...prev],
+          );
+        }
+      }),
+    [],
+  );
 
   const value: AppCtx = {
-    user, setUser,
+    user,
+    setUser,
     chats: chatState.chats,
-    notifications, unreadNotifCount,
+    notifications,
+    unreadNotifCount,
     getUserById: (id) => users[id],
     getChatById: (id) => chatState.chats.find((c) => c.id === id),
     getMessages: msgState.getMessages,
@@ -104,7 +165,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     subscribeChat: msgState.subscribeChat,
     sendMessage: msgState.sendMessage,
     sendTyping: msgState.sendTyping,
-    markAsRead: (chatId, messageId) => { msgState.markAsRead(chatId, messageId); chatState.setChats((cs) => cs.map((c) => (c.id === chatId ? { ...c, unread: 0 } : c))); },
+    markAsRead: (chatId, messageId) => {
+      msgState.markAsRead(chatId, messageId);
+      chatState.setChats((cs) =>
+        cs.map((c) => (c.id === chatId ? { ...c, unread: 0 } : c)),
+      );
+    },
     editMessage: msgState.editMessage,
     deleteMessage: msgState.deleteMessage,
     pinMessage: msgState.pinMessage,
@@ -116,11 +182,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const results = (await userApi.searchUsers(query)).map(mapUser);
         results.forEach(upsertUser);
         return results;
-      } catch { return []; }
+      } catch {
+        return [];
+      }
     },
 
     openChatWithUser: (peer) => chatState.openChatWithUser(peer, user.id),
-    createGroup: (type, title, memberIds, desc) => chatState.createGroup(type, title, memberIds, user.id, desc),
+    createGroup: (type, title, memberIds, desc) =>
+      chatState.createGroup(type, title, memberIds, user.id, desc),
     addMemberToChat: chatState.addMember,
     removeMemberFromChat: chatState.removeMember,
 
@@ -136,8 +205,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setNotifications((ns) => ns.map((n) => ({ ...n, isRead: true })));
     },
     refreshNotifications: () => {
-      notificationApi.getAll(0, 50).then((page) => setNotifications(page.content)).catch(console.error);
-      notificationApi.countUnread().then(setUnreadNotifCount).catch(console.error);
+      notificationApi
+        .getAll(0, 50)
+        .then((page) => setNotifications(page.content))
+        .catch(console.error);
+      notificationApi
+        .countUnread()
+        .then(setUnreadNotifCount)
+        .catch(console.error);
     },
   };
 

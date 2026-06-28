@@ -60,11 +60,11 @@ function LoginPage() {
         <form onSubmit={submit} className="space-y-3">
           <Field
             icon={Mail}
-            label="Username or email"
+            label="Email"
             value={email}
             onChange={setEmail}
-            placeholder="vaibhav or you@email.com"
-            type="text"
+            placeholder="you@email.com"
+            type="email"
             required
           />
           <Field

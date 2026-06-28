@@ -8,10 +8,13 @@ import { formatLocalTime } from "@/lib/time";
 
 type SetChats = (fn: Chat[] | ((prev: Chat[]) => Chat[])) => void;
 
-
-
-export function useMessageState(userRef: MutableRefObject<User>, setChats: SetChats) {
-  const [messagesByChat, setMessagesByChat] = useState<Record<string, Message[]>>({});
+export function useMessageState(
+  userRef: MutableRefObject<User>,
+  setChats: SetChats,
+) {
+  const [messagesByChat, setMessagesByChat] = useState<
+    Record<string, Message[]>
+  >({});
 
   const getMessages = (chatId: string) => messagesByChat[chatId] ?? [];
 
@@ -37,19 +40,60 @@ export function useMessageState(userRef: MutableRefObject<User>, setChats: SetCh
 
         if (event.type === "NEW_MESSAGE") {
           const msg = mapMessage(payload);
-          next = current.some((m) => m.id === msg.id) ? current : [...current, msg];
-          setChats((cs) => cs.map((c) => c.id === chatId
-            ? { ...c, lastMessage: msg.content, lastTime: formatLocalTime(msg.createdAt), unread: msg.senderId !== userRef.current.id ? c.unread + 1 : c.unread }
-            : c));
+          next = current.some((m) => m.id === msg.id)
+            ? current
+            : [...current, msg];
+          setChats((cs) =>
+            cs.map((c) =>
+              c.id === chatId
+                ? {
+                    ...c,
+                    lastMessage: msg.content,
+                    lastTime: formatLocalTime(msg.createdAt),
+                    unread:
+                      msg.senderId !== userRef.current.id
+                        ? c.unread + 1
+                        : c.unread,
+                  }
+                : c,
+            ),
+          );
         } else if (event.type === "MESSAGE_EDITED") {
           const msgId = String(payload.id);
-          next = current.map((m) => m.id === msgId ? { ...m, content: payload.content, isEdited: true } : m);
+          next = current.map((m) =>
+            m.id === msgId
+              ? { ...m, content: payload.content, isEdited: true }
+              : m,
+          );
         } else if (event.type === "MESSAGE_DELETED") {
           const msgId = String((payload as any).messageId || payload.id);
           next = current.filter((m) => m.id !== msgId);
+        } else if (event.type === "MESSAGE_READ") {
+          // Backend payload: { chatId, messageId, readByUserId }
+          // The reader (other user) has read every message up to messageId.
+          // Flip status to "read" on our own messages with id <= messageId.
+          const p = payload as any;
+          const readByUserId = String(p.readByUserId);
+          const upToId = Number(p.messageId);
+          const me = userRef.current.id;
+          if (readByUserId !== me && !Number.isNaN(upToId)) {
+            next = current.map((m) =>
+              m.senderId === me && Number(m.id) <= upToId && m.status !== "read"
+                ? { ...m, status: "read" }
+                : m,
+            );
+          }
         } else if (event.type === "TYPING") {
-          const isTyping = Boolean((payload as any)?.isTyping ?? true);
-          setChats((cs) => cs.map((c) => c.id === chatId ? { ...c, typing: isTyping } : c));
+          const p = payload as any;
+          // Ignore our own typing event — we're subscribed to the same /topic
+          if (String(p?.userId) === userRef.current.id) {
+            cb(next);
+            return prev;
+          }
+          const isTyping = Boolean(p?.isTyping ?? true);
+          setChats((cs) =>
+            cs.map((c) => (c.id === chatId ? { ...c, typing: isTyping } : c)),
+          );
         }
 
         cb(next);
@@ -73,7 +117,10 @@ export function useMessageState(userRef: MutableRefObject<User>, setChats: SetCh
 
   const deleteMessage = async (messageId: string, chatId: string) => {
     await messageApi.deleteMessage(messageId);
-    setMessagesByChat((prev) => ({ ...prev, [chatId]: (prev[chatId] ?? []).filter((m) => m.id !== messageId) }));
+    setMessagesByChat((prev) => ({
+      ...prev,
+      [chatId]: (prev[chatId] ?? []).filter((m) => m.id !== messageId),
+    }));
   };
 
   const pinMessage = async (chatId: string, messageId: string) => {
@@ -85,8 +132,15 @@ export function useMessageState(userRef: MutableRefObject<User>, setChats: SetCh
   };
 
   return {
-    getMessages, loadMessages, subscribeChat,
-    sendMessage, sendTyping, markAsRead,
-    editMessage, deleteMessage, pinMessage, unpinMessage,
+    getMessages,
+    loadMessages,
+    subscribeChat,
+    sendMessage,
+    sendTyping,
+    markAsRead,
+    editMessage,
+    deleteMessage,
+    pinMessage,
+    unpinMessage,
   };
 }
