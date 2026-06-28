@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/context/AppContext";
+import { formatLocalTime } from "@/lib/time";
 
 interface Props {
   msg: Message;
@@ -18,7 +19,7 @@ export function MessageBubble({ msg, showAvatar, isGroup, onReply, onEdit }: Pro
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const time = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+ const time = formatLocalTime(msg.createdAt);
 
   useEffect(() => {
     if (!menu) return;

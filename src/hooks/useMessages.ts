@@ -4,14 +4,11 @@ import { messageApi } from "@/lib/api/messageApi";
 import { chatApi } from "@/lib/api/chatApi";
 import { websocketService } from "@/lib/services/websocketService";
 import { mapMessage } from "@/lib/mappers";
+import { formatLocalTime } from "@/lib/time";
 
 type SetChats = (fn: Chat[] | ((prev: Chat[]) => Chat[])) => void;
 
-function formatTime(iso?: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
+
 
 export function useMessageState(userRef: MutableRefObject<User>, setChats: SetChats) {
   const [messagesByChat, setMessagesByChat] = useState<Record<string, Message[]>>({});
@@ -42,7 +39,7 @@ export function useMessageState(userRef: MutableRefObject<User>, setChats: SetCh
           const msg = mapMessage(payload);
           next = current.some((m) => m.id === msg.id) ? current : [...current, msg];
           setChats((cs) => cs.map((c) => c.id === chatId
-            ? { ...c, lastMessage: msg.content, lastTime: formatTime(msg.createdAt), unread: msg.senderId !== userRef.current.id ? c.unread + 1 : c.unread }
+            ? { ...c, lastMessage: msg.content, lastTime: formatLocalTime(msg.createdAt), unread: msg.senderId !== userRef.current.id ? c.unread + 1 : c.unread }
             : c));
         } else if (event.type === "MESSAGE_EDITED") {
           const msgId = String(payload.id);

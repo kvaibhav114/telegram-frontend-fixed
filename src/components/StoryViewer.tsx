@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { fetchStoryMediaByIdObjectUrl, storyApi } from "@/lib/api/storyApi";
 import { cn } from "@/lib/utils";
 import type { StoryFeedItem, StoryViewerEntry } from "@/lib/types";
+import { formatLocalDateTime } from "@/lib/time";
 
 const IMAGE_STORY_DURATION_MS = 5000;
 const VIDEO_STORY_FALLBACK_MS = 10000;
@@ -24,16 +25,7 @@ interface StoryViewerProps {
   onStoriesChanged: () => Promise<void> | void;
 }
 
-function formatTimestamp(iso: string) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+
 
 function StoryViewersModal({
   open,
@@ -116,7 +108,7 @@ function StoryViewersModal({
                     </div>
                   </div>
                   <div className="shrink-0 text-[11px] text-muted-foreground">
-                    {formatTimestamp(viewer.viewedAt)}
+                    {formatLocalDateTime(viewer.viewedAt)}
                   </div>
                 </div>
               ))}
@@ -381,7 +373,7 @@ useEffect(() => { durationRef.current = totalDurationMs; }, [totalDurationMs]);
                 {activeGroup.username}
               </div>
               <div className="text-xs text-white/70">
-                {formatTimestamp(activeStory.createdAt)}
+                {formatLocalDateTime(activeStory.createdAt)}
               </div>
             </div>
             <button

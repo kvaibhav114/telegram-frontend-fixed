@@ -2,6 +2,7 @@ import { Bell, MessageSquare, PhoneMissed, UserPlus, UserMinus, CornerUpLeft, Ch
 import { useEffect } from "react";
 import { useApp } from "@/context/AppContext";
 import type { NotificationType } from "@/lib/types";
+import { formatLocalTime } from "@/lib/time";
 
 const icons: Record<NotificationType, React.ComponentType<{className?: string}>> = {
   NEW_MESSAGE: MessageSquare,
@@ -42,7 +43,7 @@ export function NotificationPanel() {
           {notifications.map((n) => {
             const Icon = icons[n.type] ?? Bell;
             const isMissedCall = n.type === "CALL_MISSED" || n.type === "CALL_INCOMING";
-            const time = n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+            const time = formatLocalTime(n.createdAt);
             return (
               <div key={n.id} className={`flex items-center gap-3 p-3 rounded-lg border transition ${n.isRead ? "border-border bg-card/50" : "border-primary/30 bg-primary/5"}`}>
                 <span className={`size-9 rounded-full grid place-items-center ${isMissedCall ? "text-destructive bg-destructive/10" : "text-primary bg-primary/10"}`}>
