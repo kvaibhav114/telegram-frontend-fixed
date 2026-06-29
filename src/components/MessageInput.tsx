@@ -140,9 +140,9 @@ export function MessageInput({
             placeholder="Write a message…"
             className="flex-1 resize-none bg-transparent py-2 px-1 text-sm focus:outline-none placeholder:text-muted-foreground max-h-32"
           />
-          <button className="size-9 grid place-items-center rounded-full hover:bg-accent text-muted-foreground hover:text-primary transition">
+          {/* <button className="size-9 grid place-items-center rounded-full hover:bg-accent text-muted-foreground hover:text-primary transition">
             <Paperclip className="size-5" />
-          </button>
+          </button> */}
           {text.trim() && (
             <button
               onClick={submit}
