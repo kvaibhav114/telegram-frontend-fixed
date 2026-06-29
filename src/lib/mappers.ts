@@ -2,16 +2,13 @@
 import type { Chat, Message, User } from "@/lib/types";
 import type { ChatResponse, MessageResponse } from "@/lib/api/chatApi";
 import type { UserProfileResponse } from "@/lib/api/userApi";
+import { formatLocalTime } from "@/lib/time";
 
 function s(value: unknown): string {
   return String(value ?? "");
 }
 
-function formatTime(iso?: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
+
 
 export function mapUser(p: UserProfileResponse): User {
   const id = s(p.id);
@@ -69,7 +66,7 @@ export function mapChat(c: ChatResponse, meId: string): Chat {
       isOnline: m.isOnline,
     })),
     lastMessage: c.lastMessage?.content ?? "",
-    lastTime: formatTime(c.lastMessage?.createdAt),
+    lastTime: formatLocalTime(c.lastMessage?.createdAt),
     unread: c.unreadCount ?? 0,
     typing: false,
   };

@@ -1,7 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
 import { authService } from "@/lib/services/authService";
+import { setAuthToken, getAuthToken } from "@/lib/api/apiClient";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -20,6 +21,10 @@ function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setP] = useState("");
   const [loading, setLoading] = useState(false);
+
+   useEffect(() => {
+    if (getAuthToken()) setAuthToken(null);
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,11 +60,11 @@ function LoginPage() {
         <form onSubmit={submit} className="space-y-3">
           <Field
             icon={Mail}
-            label="Username or email"
+            label="Email"
             value={email}
             onChange={setEmail}
-            placeholder="vaibhav or you@email.com"
-            type="text"
+            placeholder="you@email.com"
+            type="email"
             required
           />
           <Field

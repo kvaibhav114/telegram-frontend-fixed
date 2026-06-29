@@ -14,6 +14,7 @@ export interface WsEvent<T = unknown> {
 type SignalHandler = (event: WsEvent) => void;
 type ChatHandler = (event: WsEvent<MessageResponse>) => void;
 type NotificationHandler = (event: WsEvent) => void;
+type ChatEventHandler = (event: WsEvent) => void;
 
 class WebSocketService {
   private client: Client | null = null;
@@ -21,6 +22,7 @@ class WebSocketService {
   private chatHandlers = new Map<string, Set<ChatHandler>>();
   private chatSubs = new Map<string, { unsubscribe: () => void }>();
   private notificationHandlers = new Set<NotificationHandler>();
+  private chatEventHandlers = new Set<ChatEventHandler>();
   private userId: number | null = null;
 
   onSignal(handler: SignalHandler) {
@@ -35,6 +37,12 @@ class WebSocketService {
   onNotification(handler: NotificationHandler) {
     this.notificationHandlers.add(handler);
     return () => { this.notificationHandlers.delete(handler); };
+  }
+
+  
+  onChatEvent(handler: ChatEventHandler) {
+    this.chatEventHandlers.add(handler);
+    return () => { this.chatEventHandlers.delete(handler); };
   }
 
   subscribeToChat(chatId: string, cb: ChatHandler) {
@@ -104,6 +112,11 @@ class WebSocketService {
         this.client?.subscribe("/user/queue/notifications", (frame) => {
           const event = JSON.parse(frame.body) as WsEvent;
           this.notificationHandlers.forEach((h) => h(event));
+        });
+        // Per-user chat events (e.g. ADDED_TO_CHAT)
+        this.client?.subscribe("/user/queue/chat-events", (frame) => {
+          const event = JSON.parse(frame.body) as WsEvent;
+          this.chatEventHandlers.forEach((h) => h(event));
         });
         // File transfers
         this.client?.subscribe("/user/queue/file-transfers", (frame) => {

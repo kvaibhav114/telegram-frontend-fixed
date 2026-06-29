@@ -5,6 +5,7 @@ import { MessageInput } from "./MessageInput";
 import { GroupInfoPanel } from "./GroupInfoPanel";
 import { useApp } from "@/context/AppContext";
 import type { Chat, Message } from "@/lib/types";
+import { formatDateDivider, localDayKey } from "@/lib/time";
 
 export function ChatWindow({ chat }: { chat: Chat }) {
   const { user, loadMessages, subscribeChat, sendMessage, sendTyping, markAsRead, editMessage } = useApp();
@@ -48,13 +49,24 @@ export function ChatWindow({ chat }: { chat: Chat }) {
         <ChatHeader chat={chat} onInfo={() => setShowInfo((s) => !s)} />
 
         <div className="flex-1 overflow-y-auto scrollbar-thin chat-bg px-3 md:px-6 py-3 space-y-1">
-          <div className="mx-auto w-fit text-[10px] text-muted-foreground bg-card/70 backdrop-blur px-2.5 py-0.5 rounded-full mb-2">Today</div>
           {messages.map((m, i) => {
+            const prev = messages[i - 1];
             const next = messages[i + 1];
             const showAvatar = !next || next.senderId !== m.senderId;
-            return <MessageBubble key={m.id} msg={m} showAvatar={showAvatar} isGroup={isGroup}
-              onReply={(msg) => { setEditingMsg(null); setReplyTo(msg); }}
-              onEdit={(msg) => { setReplyTo(null); setEditingMsg(msg); }} />;
+            const showDivider = !prev || localDayKey(prev.createdAt) !== localDayKey(m.createdAt);
+            const dividerLabel = showDivider ? formatDateDivider(m.createdAt) : null;
+            return (
+              <div key={m.id}>
+                {dividerLabel && (
+                  <div className="mx-auto w-fit text-[10px] text-muted-foreground bg-card/70 backdrop-blur px-2.5 py-0.5 rounded-full my-2">
+                    {dividerLabel}
+                  </div>
+                )}
+                <MessageBubble msg={m} showAvatar={showAvatar} isGroup={isGroup}
+                  onReply={(msg) => { setEditingMsg(null); setReplyTo(msg); }}
+                  onEdit={(msg) => { setReplyTo(null); setEditingMsg(msg); }} />
+              </div>
+            );
           })}
           {chat.typing && (
             <div className="flex items-end gap-2">

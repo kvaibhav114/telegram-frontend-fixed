@@ -36,14 +36,24 @@ export function extractAuthToken(response: unknown): string | null {
 export async function apiFetch<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = getAuthToken();
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
-  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+
+  const isPublicAuthEndpoint =
+    endpoint.startsWith("/api/auth/login") ||
+    endpoint.startsWith("/api/auth/register");
+
+
+ const res = await fetch(`${API_BASE_URL}${endpoint}`, {
     headers: {
       ...(!isFormData ? { "Content-Type": "application/json" } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(token && !isPublicAuthEndpoint ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
     ...options,
   });
+
+   if ((res.status === 401 || res.status === 403) && token && !isPublicAuthEndpoint) {
+    setAuthToken(null);
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => null);

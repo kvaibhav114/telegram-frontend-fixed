@@ -5,6 +5,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { AppProvider } from "@/context/AppContext";
 import { IncomingCallModal } from "@/components/IncomingCallModal";
+import { OutgoingCallModal } from "@/components/OutgoingCallModal"; 
 import { VoiceCallScreen } from "@/components/VoiceCallScreen";
 import { VideoCallScreen } from "@/components/VideoCallScreen";
 
@@ -76,6 +77,7 @@ function RootComponent() {
       <AppProvider>
         <Outlet />
         <IncomingCallModal />
+        <OutgoingCallModal />
         <VoiceCallScreen />
         <VideoCallScreen />
       </AppProvider>

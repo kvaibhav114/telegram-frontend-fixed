@@ -18,8 +18,8 @@ export const Route = createFileRoute("/register")({
 
 function RegisterPage() {
   const nav = useNavigate();
-  const [emoji, setEmoji] = useState("🚀");
-  const [name, setName] = useState("Vaibhav");
+  const [emoji, setEmoji] = useState(""); 
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [pwd, setPwd] = useState("");
   const [pwd2, setPwd2] = useState("");
@@ -79,7 +79,7 @@ const submit = async (e: React.FormEvent) => {
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold tracking-tight">Create your account</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Pick a username — drop an emoji in it ✨
+            Pick a username — drop an emoji in it 
           </p>
         </div>
 
@@ -121,7 +121,7 @@ const submit = async (e: React.FormEvent) => {
                 ref={inputRef}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Vaibhav"
+                placeholder="Name"
                 required
                 className="w-full h-12 pl-14 pr-12 rounded-2xl bg-input/60 border border-border focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition text-sm"
               />
@@ -135,20 +135,7 @@ const submit = async (e: React.FormEvent) => {
                 />
               </div>
             )}
-            <div className="mt-2 flex gap-1.5 flex-wrap">
-              {["🚀", "🔥", "🎮", "🐱", "🌸", "⚡", "🎧", "🎓"].map((e) => (
-                <button
-                  type="button"
-                  key={e}
-                  onClick={() => setEmoji(e)}
-                  className={`size-8 rounded-xl grid place-items-center text-base hover:bg-accent transition border ${
-                    emoji === e ? "border-primary bg-primary/10" : "border-transparent"
-                  }`}
-                >
-                  {e}
-                </button>
-              ))}
-            </div>
+            
           </label>
 
           <Field icon={Mail} label="Email" value={email} onChange={setEmail} placeholder="you@email.com" type="email" required />
