@@ -106,13 +106,7 @@ export function useMessageState(
     websocketService.sendMessage(chatId, text, replyToId);
 
   const sendFile = async (chatId: string, file: File) => {
-    const response = await messageApi.sendFile(Number(chatId), file);
-
-    if ("attachments" in response) {
-      return;
-    }
-
-    if ("status" in response) return;
+    await messageApi.sendFile(Number(chatId), file);
   };
 
   const sendTyping = (chatId: string, isTyping: boolean) =>
