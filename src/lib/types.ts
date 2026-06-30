@@ -1,4 +1,3 @@
-// Enums matching backend
 export type ChatType = "PRIVATE" | "GROUP" | "CHANNEL";
 export type MessageType = "TEXT" | "VOICE" | "FILE" | "SYSTEM";
 export type MemberRole = "OWNER" | "ADMIN" | "MEMBER";
@@ -6,6 +5,10 @@ export type CallType = "VOICE" | "VIDEO";
 export type CallStatus = "RINGING" | "ACTIVE" | "ENDED" | "REJECTED" | "MISSED" | "CANCELLED";
 export type FileTransferStatus = "PENDING" | "ACCEPTED" | "TRANSFERRING" | "COMPLETED" | "REJECTED" | "CANCELLED" | "FAILED";
 export type NotificationType = "NEW_MESSAGE" | "REPLY" | "USER_JOINED_CHAT" | "USER_LEFT_CHAT" | "CALL_INCOMING" | "CALL_MISSED";
+
+
+export type ParticipantRole = "CREATOR" | "MEMBER";
+export type ParticipantStatus = "INVITED" | "RINGING" | "JOINED" | "LEFT" | "REJECTED";
 
 export interface User {
   id: string;
@@ -109,8 +112,41 @@ export interface StoryViewerEntry {
   viewedAt: string;
 }
 
+export interface CallParticipant {
+  userId: string;
+  name: string;
+  avatarUrl: string | null;
+  status: ParticipantStatus;
+  role: ParticipantRole;
+  muted: boolean;
+  cameraEnabled: boolean;
+  screenSharing: boolean;
+  self: boolean;
+  stream?: MediaStream; // remote media; undefined for self (use local stream)
+}
+
 export type CallState =
   | { state: "idle" }
-  | { state: "incoming"; peer: User; type: CallType; callId: string }
-  | { state: "outgoing"; peer: User; type: CallType; callId: string }
-  | { state: "active"; peer: User; type: CallType; callId: string };
+  | {
+      state: "incoming";
+      callId: string;
+      type: CallType;
+      creatorId: string;
+      creatorName: string;
+      creatorAvatarUrl: string | null;
+      participants: CallParticipant[];
+    }
+  | {
+      state: "outgoing";
+      callId: string;
+      type: CallType;
+      creatorId: string;
+      participants: CallParticipant[];
+    }
+  | {
+      state: "active";
+      callId: string;
+      type: CallType;
+      creatorId: string;
+      participants: CallParticipant[];
+    };

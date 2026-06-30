@@ -49,7 +49,7 @@ export interface AppCtx {
   getUserById: (id: string) => User | undefined;
   getChatById: (id: string) => Chat | undefined;
   call: CallState;
-  startCall: (peer: User, type: CallType) => Promise<void>;
+  startCall: (peers: User[], type: CallType) => Promise<void>;
   acceptCall: () => void;
   rejectCall: () => void;
   endCall: () => void;
@@ -129,16 +129,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Notification WebSocket
+
   useEffect(
     () =>
       websocketService.onNotification(() => setUnreadNotifCount((c) => c + 1)),
     [],
   );
 
-  // Per-user chat events: when the server says the user has been added to a
-  // chat (added by an admin, or after joinViaInviteLink in another tab),
-  // prepend it to the sidebar live.
+
   useEffect(
     () =>
       websocketService.onChatEvent((event) => {

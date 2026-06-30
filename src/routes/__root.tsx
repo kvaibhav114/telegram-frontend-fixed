@@ -6,8 +6,7 @@ import appCss from "../styles.css?url";
 import { AppProvider } from "@/context/AppContext";
 import { IncomingCallModal } from "@/components/IncomingCallModal";
 import { OutgoingCallModal } from "@/components/OutgoingCallModal"; 
-import { VoiceCallScreen } from "@/components/VoiceCallScreen";
-import { VideoCallScreen } from "@/components/VideoCallScreen";
+import { CallScreen } from "@/components/CallScreen";
 
 function NotFoundComponent() {
   return (
@@ -78,8 +77,7 @@ function RootComponent() {
         <Outlet />
         <IncomingCallModal />
         <OutgoingCallModal />
-        <VoiceCallScreen />
-        <VideoCallScreen />
+        <CallScreen />
       </AppProvider>
     </QueryClientProvider>
   );

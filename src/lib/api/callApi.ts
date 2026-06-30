@@ -1,27 +1,40 @@
 import { apiFetch } from "./apiClient";
 import type { CallType, CallStatus } from "../types";
 
+export type ParticipantRole = "CREATOR" | "MEMBER";
+export type ParticipantStatus = "INVITED" | "RINGING" | "JOINED" | "LEFT" | "REJECTED";
+
+export interface ParticipantResponse {
+  userId: number;
+  name: string;
+  avatarUrl: string | null;
+  role: ParticipantRole;
+  status: ParticipantStatus;
+  muted: boolean;
+  cameraEnabled: boolean;
+  screenSharing: boolean;
+}
+
 export interface CallResponse {
   callId: number;
-  callerId: number;
-  callerName: string;
-  callerAvatarUrl: string | null;
-  receiverId: number;
-  receiverName: string;
-  receiverAvatarUrl: string | null;
+  creatorId: number;
+  creatorName: string;
+  creatorAvatarUrl: string | null;
   callType: CallType;
   status: CallStatus;
   createdAt: string;
   startedAt: string | null;
   endedAt: string | null;
   durationSeconds: number | null;
+  participants: ParticipantResponse[];
 }
 
 export const callApi = {
-  initiate: (receiverId: number, callType: CallType) =>
-    apiFetch<CallResponse>("/api/calls/initiate", {
+  // Was POST /api/calls/initiate { receiverId }. Now group endpoint.
+  initiate: (participantIds: number[], callType: CallType) =>
+    apiFetch<CallResponse>("/api/calls/group", {
       method: "POST",
-      body: JSON.stringify({ receiverId, callType }),
+      body: JSON.stringify({ participantIds, callType }),
     }),
 
   accept: (callId: number | string) =>

@@ -12,6 +12,7 @@ export interface WsEvent<T = unknown> {
 }
 
 type SignalHandler = (event: WsEvent) => void;
+type CallEventHandler = (event: WsEvent) => void;
 type ChatHandler = (event: WsEvent<MessageResponse>) => void;
 type NotificationHandler = (event: WsEvent) => void;
 type ChatEventHandler = (event: WsEvent) => void;
@@ -19,15 +20,23 @@ type ChatEventHandler = (event: WsEvent) => void;
 class WebSocketService {
   private client: Client | null = null;
   private signalHandlers = new Set<SignalHandler>();
+  private callEventHandlers = new Set<CallEventHandler>();
   private chatHandlers = new Map<string, Set<ChatHandler>>();
   private chatSubs = new Map<string, { unsubscribe: () => void }>();
   private notificationHandlers = new Set<NotificationHandler>();
   private chatEventHandlers = new Set<ChatEventHandler>();
   private userId: number | null = null;
 
+  /** WebRTC media signaling only (OFFER / ANSWER / ICE_CANDIDATE). */
   onSignal(handler: SignalHandler) {
     this.signalHandlers.add(handler);
     return () => { this.signalHandlers.delete(handler); };
+  }
+
+  /** Call lifecycle events (INCOMING_CALL, PARTICIPANT_*, CALL_ENDED, …). */
+  onCallEvent(handler: CallEventHandler) {
+    this.callEventHandlers.add(handler);
+    return () => { this.callEventHandlers.delete(handler); };
   }
 
   sendSignal(msg: Record<string, unknown>) {
@@ -39,7 +48,6 @@ class WebSocketService {
     return () => { this.notificationHandlers.delete(handler); };
   }
 
-  
   onChatEvent(handler: ChatEventHandler) {
     this.chatEventHandlers.add(handler);
     return () => { this.chatEventHandlers.delete(handler); };
@@ -97,28 +105,27 @@ class WebSocketService {
       reconnectDelay: 5000,
       connectHeaders: { Authorization: `Bearer ${authToken}` },
       onConnect: () => {
-        // Re-attach chat subs
         for (const chatId of this.chatHandlers.keys()) this.attachChat(chatId);
-        // Calls
+
+        // Call lifecycle → onCallEvent handlers.
         this.client?.subscribe("/user/queue/calls", (frame) => {
           const event = JSON.parse(frame.body) as WsEvent;
-          this.signalHandlers.forEach((h) => h(event));
+          this.callEventHandlers.forEach((h) => h(event));
         });
+        // WebRTC media signaling → onSignal handlers.
         this.client?.subscribe("/user/queue/signal", (frame) => {
           const event = JSON.parse(frame.body) as WsEvent;
           this.signalHandlers.forEach((h) => h(event));
         });
-        // Notifications
         this.client?.subscribe("/user/queue/notifications", (frame) => {
           const event = JSON.parse(frame.body) as WsEvent;
           this.notificationHandlers.forEach((h) => h(event));
         });
-        // Per-user chat events (e.g. ADDED_TO_CHAT)
         this.client?.subscribe("/user/queue/chat-events", (frame) => {
           const event = JSON.parse(frame.body) as WsEvent;
           this.chatEventHandlers.forEach((h) => h(event));
         });
-        // File transfers
+        // File transfers still use the signal channel.
         this.client?.subscribe("/user/queue/file-transfers", (frame) => {
           const event = JSON.parse(frame.body) as WsEvent;
           this.signalHandlers.forEach((h) => h(event));
