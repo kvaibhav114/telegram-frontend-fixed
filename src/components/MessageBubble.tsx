@@ -4,7 +4,7 @@ import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/context/AppContext";
 import { formatLocalTime } from "@/lib/time";
-import { webrtcService } from "@/lib/services/webrtcService";
+import { API_BASE_URL } from "@/lib/api/apiClient";
 
 interface Props {
   msg: Message;
@@ -18,7 +18,6 @@ export function MessageBubble({ msg, showAvatar, isGroup, onReply, onEdit }: Pro
   const { user, deleteMessage, pinMessage } = useApp();
   const isMine = msg.senderId === user.id;
   const [menu, setMenu] = useState(false);
-  const [, forceRefresh] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
 
  const time = formatLocalTime(msg.createdAt);
@@ -30,22 +29,6 @@ export function MessageBubble({ msg, showAvatar, isGroup, onReply, onEdit }: Pro
     return () => document.removeEventListener("mousedown", close);
   }, [menu]);
 
-  useEffect(() => {
-    return webrtcService.onFileReceived((transferId, file) => {
-      if (
-        msg.attachments.some(
-          (attachment) =>
-            attachment.transferId === transferId ||
-            attachment.id === transferId ||
-            (attachment.fileName === file.name &&
-              (attachment.sizeBytes ?? file.size) === file.size),
-        )
-      ) {
-        forceRefresh((value) => value + 1);
-      }
-    });
-  }, [msg.attachments]);
-
   const actions = [
     { icon: CornerUpLeft, label: "Reply", action: () => { onReply(msg); setMenu(false); } },
     ...(isMine ? [{ icon: Pencil, label: "Edit", action: () => { onEdit(msg); setMenu(false); } }] : []),
@@ -54,22 +37,13 @@ export function MessageBubble({ msg, showAvatar, isGroup, onReply, onEdit }: Pro
     ...(isMine ? [{ icon: Trash2, label: "Delete", action: () => { deleteMessage(msg.id, msg.chatId).catch(console.error); setMenu(false); }, danger: true }] : []),
   ];
 
-  const attachments = msg.attachments.map((attachment) => {
-    const fallbackKey = `${attachment.fileName}:${attachment.sizeBytes ?? 0}`;
-    const resolvedUrl =
-      attachment.fileUrl ??
-      webrtcService.getAttachmentFileUrl([
-        attachment.id ?? "",
-        attachment.transferId ?? "",
-        msg.id,
-        fallbackKey,
-      ]);
-
-    return {
-      ...attachment,
-      resolvedUrl,
-    };
-  });
+  const attachments = (msg.attachments ?? []).map((attachment) => ({
+    ...attachment,
+    resolvedUrl: attachment.fileUrl ? `${API_BASE_URL}${attachment.fileUrl}` : null,
+    thumbnailSrc: attachment.thumbnailUrl
+      ? `${API_BASE_URL}${attachment.thumbnailUrl}`
+      : null,
+  }));
 
   return (
     <div className={cn("flex gap-1.5 items-end group", isMine ? "justify-end" : "justify-start")}>
@@ -93,31 +67,75 @@ export function MessageBubble({ msg, showAvatar, isGroup, onReply, onEdit }: Pro
           <div className="text-sm whitespace-pre-wrap break-words leading-snug">{msg.content}</div>
           {attachments.length > 0 && (
             <div className="mt-2 space-y-1.5">
-              {attachments.map((attachment, index) => (
-                <a
-                  key={`${attachment.id ?? attachment.fileName}-${index}`}
-                  href={attachment.resolvedUrl ?? undefined}
-                  download={attachment.fileName}
-                  target={attachment.fileUrl ? "_blank" : undefined}
-                  rel={attachment.fileUrl ? "noreferrer" : undefined}
-                  className={cn(
-                    "flex items-center gap-2 rounded-xl border px-2.5 py-2 text-xs",
-                    isMine
-                      ? "border-white/15 bg-white/10 text-white"
-                      : "border-border bg-background/70 text-foreground",
-                    !attachment.resolvedUrl && "pointer-events-none opacity-80",
-                  )}
-                >
-                  <FileIcon className="size-4 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium">{attachment.fileName}</div>
-                    <div className={cn("text-[10px]", isMine ? "text-white/70" : "text-muted-foreground")}>
-                      {attachment.fileUrl ? "Cloud file" : attachment.resolvedUrl ? "P2P file" : "P2P transfer completed"}
+              {attachments.map((attachment, index) => {
+                const mimeType = attachment.mimeType ?? "";
+                const isImage = mimeType.startsWith("image/");
+                const isVideo = mimeType.startsWith("video/");
+                const isAudio = mimeType.startsWith("audio/");
+                const isPdf =
+                  mimeType === "application/pdf" ||
+                  attachment.fileName.toLowerCase().endsWith(".pdf");
+
+                if (isImage && attachment.resolvedUrl) {
+                  return (
+                    <img
+                      key={`${attachment.id ?? attachment.fileName}-${index}`}
+                      src={attachment.resolvedUrl}
+                      alt={attachment.fileName}
+                      className="max-h-72 w-full rounded-xl object-cover"
+                    />
+                  );
+                }
+
+                if (isVideo && attachment.resolvedUrl) {
+                  return (
+                    <video
+                      key={`${attachment.id ?? attachment.fileName}-${index}`}
+                      controls
+                      poster={attachment.thumbnailSrc ?? undefined}
+                      className="max-h-72 w-full rounded-xl"
+                      src={attachment.resolvedUrl}
+                    />
+                  );
+                }
+
+                if (isAudio && attachment.resolvedUrl) {
+                  return (
+                    <audio
+                      key={`${attachment.id ?? attachment.fileName}-${index}`}
+                      controls
+                      className="w-full"
+                      src={attachment.resolvedUrl}
+                    />
+                  );
+                }
+
+                return (
+                  <a
+                    key={`${attachment.id ?? attachment.fileName}-${index}`}
+                    href={attachment.resolvedUrl ?? undefined}
+                    download={!isPdf ? attachment.fileName : undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={cn(
+                      "flex items-center gap-2 rounded-xl border px-2.5 py-2 text-xs",
+                      isMine
+                        ? "border-white/15 bg-white/10 text-white"
+                        : "border-border bg-background/70 text-foreground",
+                      !attachment.resolvedUrl && "pointer-events-none opacity-80",
+                    )}
+                  >
+                    <FileIcon className="size-4 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium">{attachment.fileName}</div>
+                      <div className={cn("text-[10px]", isMine ? "text-white/70" : "text-muted-foreground")}>
+                        {isPdf ? "Open PDF" : "Download file"}
+                      </div>
                     </div>
-                  </div>
-                  {attachment.resolvedUrl && <Download className="size-3.5 shrink-0" />}
-                </a>
-              ))}
+                    {attachment.resolvedUrl && <Download className="size-3.5 shrink-0" />}
+                  </a>
+                );
+              })}
             </div>
           )}
           <div className={cn("flex items-center gap-1 mt-0.5 text-[10px]", isMine ? "text-white/60 justify-end" : "text-muted-foreground")}>

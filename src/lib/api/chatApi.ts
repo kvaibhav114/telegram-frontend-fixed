@@ -30,13 +30,10 @@ export interface MessageResponse {
 export interface AttachmentResponse {
   id?: number | string | null;
   fileName?: string | null;
-  originalFileName?: string | null;
-  contentType?: string | null;
   mimeType?: string | null;
   fileSize?: number | null;
-  sizeBytes?: number | null;
   fileUrl?: string | null;
-  transferId?: number | string | null;
+  thumbnailUrl?: string | null;
 }
 
 export interface PinnedMessageResponse {

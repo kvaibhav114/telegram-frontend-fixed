@@ -33,7 +33,7 @@ export function mapMessage(r: MessageResponse): Message {
     senderAvatarUrl: r.senderAvatarUrl ?? `https://i.pravatar.cc/150?u=${r.senderId}`,
     type: r.type ?? "TEXT",
     content: r.content ?? "",
-    attachments: (r.attachments ?? []).map(mapAttachment),
+    attachments: r.attachments?.map(mapAttachment),
     replyToId: r.replyToId ? s(r.replyToId) : null,
     replyToContent: r.replyToContent ?? null,
     isEdited: r.isEdited ?? false,
@@ -45,11 +45,11 @@ export function mapMessage(r: MessageResponse): Message {
 function mapAttachment(r: AttachmentResponse) {
   return {
     id: r.id != null ? s(r.id) : null,
-    fileName: r.originalFileName ?? r.fileName ?? "Attachment",
-    contentType: r.contentType ?? r.mimeType ?? null,
-    sizeBytes: r.fileSize ?? r.sizeBytes ?? null,
+    fileName: r.fileName ?? "Attachment",
+    mimeType: r.mimeType ?? null,
+    fileSize: r.fileSize ?? null,
     fileUrl: r.fileUrl ?? null,
-    transferId: r.transferId != null ? s(r.transferId) : null,
+    thumbnailUrl: r.thumbnailUrl ?? null,
   };
 }
 

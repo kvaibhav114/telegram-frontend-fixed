@@ -52,7 +52,7 @@ export interface Message {
   senderAvatarUrl: string;
   type: MessageType;
   content: string;
-  attachments: Attachment[];
+  attachments?: Attachment[];
   replyToId: string | null;
   replyToContent: string | null;
   isEdited: boolean;
@@ -63,10 +63,10 @@ export interface Message {
 export interface Attachment {
   id: string | null;
   fileName: string;
-  contentType: string | null;
-  sizeBytes: number | null;
+  mimeType: string | null;
+  fileSize: number | null;
   fileUrl: string | null;
-  transferId: string | null;
+  thumbnailUrl: string | null;
 }
 
 export interface PinnedMessage {
