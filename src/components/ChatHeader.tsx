@@ -42,12 +42,22 @@ export function ChatHeader({ chat, onInfo }: { chat: Chat; onInfo?: () => void }
     }
   }, [chat.id]);
 
-  const callPeer = (type: CallType) => {
-    if (!otherMember) return;
-    void startCall({
-      id: otherMember.userId, username: otherMember.username, displayName: otherMember.displayName,
-      email: "", bio: "", avatarUrl: otherMember.avatarUrl, isOnline: otherMember.isOnline, lastSeenAt: null,
-    }, type);
+  const handleCall = (type: CallType) => {
+    if (isGroup) {
+      const peers = chat.members
+        .filter((m) => m.userId !== user.id)
+        .map((m) => ({
+          id: m.userId, username: m.username, displayName: m.displayName,
+          email: "", bio: "", avatarUrl: m.avatarUrl, isOnline: m.isOnline, lastSeenAt: null,
+        }));
+      void startCall(peers, type);
+    } else {
+      if (!otherMember) return;
+      void startCall([{
+        id: otherMember.userId, username: otherMember.username, displayName: otherMember.displayName,
+        email: "", bio: "", avatarUrl: otherMember.avatarUrl, isOnline: otherMember.isOnline, lastSeenAt: null,
+      }], type);
+    }
   };
 
   const handleUnpin = async (pin: PinnedMessage) => {
@@ -107,16 +117,16 @@ export function ChatHeader({ chat, onInfo }: { chat: Chat; onInfo?: () => void }
               </span>
             </button>
           )}
+          <button onClick={() => handleCall("VOICE")} disabled={!isGroup && blocked}
+            className="size-9 grid place-items-center rounded-lg hover:bg-accent text-muted-foreground hover:text-primary transition disabled:opacity-30">
+            <Phone className="size-4" />
+          </button>
+          <button onClick={() => handleCall("VIDEO")} disabled={!isGroup && blocked}
+            className="size-9 grid place-items-center rounded-lg hover:bg-accent text-muted-foreground hover:text-primary transition disabled:opacity-30">
+            <Video className="size-4" />
+          </button>
           {!isGroup && (
             <>
-              <button onClick={() => callPeer("VOICE")} disabled={blocked}
-                className="size-9 grid place-items-center rounded-lg hover:bg-accent text-muted-foreground hover:text-primary transition disabled:opacity-30">
-                <Phone className="size-4" />
-              </button>
-              <button onClick={() => callPeer("VIDEO")} disabled={blocked}
-                className="size-9 grid place-items-center rounded-lg hover:bg-accent text-muted-foreground hover:text-primary transition disabled:opacity-30">
-                <Video className="size-4" />
-              </button>
               {/* Block / Unblock button */}
               <button onClick={handleToggleBlock} disabled={blockLoading}
                 title={blocked ? "Unblock user" : "Block user"}
