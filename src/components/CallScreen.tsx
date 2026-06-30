@@ -4,25 +4,21 @@ import { useApp } from "@/context/AppContext";
 import { webrtcService } from "@/lib/services/webrtcService";
 import type { CallParticipant } from "@/lib/types";
 
-/**
- * One screen for both VOICE and VIDEO group calls. Renders a responsive grid of
- * remote participants plus a local self-tile, and subscribes to webrtcService
- * stream events so tiles populate as media arrives.
- */
+
 export function CallScreen() {
   const { call, endCall } = useApp();
   const [muted, setMuted] = useState(false);
   const [cam, setCam] = useState(true);
   const [speaker, setSpeaker] = useState(true);
   const [seconds, setSeconds] = useState(0);
-  // bump to re-read streams from the service when they change
+  
   const [, force] = useState(0);
   const localRef = useRef<HTMLVideoElement>(null);
 
   const isActive = call.state === "active";
   const isVideo = call.state !== "idle" && call.type === "VIDEO";
 
-  // Subscribe to media stream changes.
+  
   useEffect(() => {
     if (call.state === "idle") return;
     webrtcService.setOnLocalStream((stream) => {
@@ -32,7 +28,6 @@ export function CallScreen() {
     webrtcService.setOnPeerClosed(() => force((v) => v + 1));
   }, [call.state]);
 
-  // Call duration timer.
   useEffect(() => {
     if (!isActive) return;
     setSeconds(0);
@@ -44,11 +39,9 @@ export function CallScreen() {
 
   const t = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 
-  // Remote participants are everyone JOINED except self.
   const remotes = call.participants.filter((p) => !p.self && p.status === "JOINED");
   const self = call.participants.find((p) => p.self);
 
-  // Grid columns by participant count (incl. self tile).
   const total = remotes.length + 1;
   const cols = total <= 1 ? 1 : total <= 4 ? 2 : 3;
 
@@ -157,7 +150,6 @@ function RemoteTile({
         <video ref={mediaRef} autoPlay playsInline className="w-full h-full object-cover" />
       ) : (
         <>
-          {/* audio-only: hidden media element carries sound, avatar shown */}
           <video ref={mediaRef} autoPlay playsInline className="hidden" />
           <Avatar name={participant.name} url={participant.avatarUrl} />
         </>

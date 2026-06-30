@@ -150,6 +150,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // Update member online/offline status in real-time.
+  useEffect(
+    () =>
+      websocketService.onPresence((data) => {
+        const uid = String(data.userId);
+        chatState.setChats((prev) =>
+          prev.map((c) => ({
+            ...c,
+            members: c.members.map((m) =>
+              m.userId === uid ? { ...m, isOnline: data.isOnline } : m,
+            ),
+          })),
+        );
+      }),
+    [],
+  );
+
   const value: AppCtx = {
     user,
     setUser,

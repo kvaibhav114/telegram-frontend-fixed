@@ -16,6 +16,7 @@ type CallEventHandler = (event: WsEvent) => void;
 type ChatHandler = (event: WsEvent<MessageResponse>) => void;
 type NotificationHandler = (event: WsEvent) => void;
 type ChatEventHandler = (event: WsEvent) => void;
+type PresenceHandler = (data: { userId: number; isOnline: boolean; lastSeenAt?: string }) => void;
 
 class WebSocketService {
   private client: Client | null = null;
@@ -25,6 +26,7 @@ class WebSocketService {
   private chatSubs = new Map<string, { unsubscribe: () => void }>();
   private notificationHandlers = new Set<NotificationHandler>();
   private chatEventHandlers = new Set<ChatEventHandler>();
+  private presenceHandlers = new Set<PresenceHandler>();
   private userId: number | null = null;
 
   /** WebRTC media signaling only (OFFER / ANSWER / ICE_CANDIDATE). */
@@ -51,6 +53,11 @@ class WebSocketService {
   onChatEvent(handler: ChatEventHandler) {
     this.chatEventHandlers.add(handler);
     return () => { this.chatEventHandlers.delete(handler); };
+  }
+
+  onPresence(handler: PresenceHandler) {
+    this.presenceHandlers.add(handler);
+    return () => { this.presenceHandlers.delete(handler); };
   }
 
   subscribeToChat(chatId: string, cb: ChatHandler) {
@@ -98,7 +105,10 @@ class WebSocketService {
     const authToken = token ?? getAuthToken();
     if (!authToken || this.client?.active) return;
     this.userId = userId;
-    const wsUrl = API_BASE_URL.replace(/^http(s?)/, "ws$1") + "/ws";
+
+    const wsUrl = API_BASE_URL
+      ? API_BASE_URL.replace(/^http(s?)/, "ws$1") + "/ws"
+      : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/ws`;
 
     this.client = new Client({
       brokerURL: wsUrl,
@@ -129,6 +139,11 @@ class WebSocketService {
         this.client?.subscribe("/user/queue/file-transfers", (frame) => {
           const event = JSON.parse(frame.body) as WsEvent;
           this.signalHandlers.forEach((h) => h(event));
+        });
+        // Presence updates (online/offline).
+        this.client?.subscribe("/topic/presence", (frame) => {
+          const data = JSON.parse(frame.body);
+          this.presenceHandlers.forEach((h) => h(data));
         });
       },
       onStompError: (frame) => console.error("STOMP error", frame),

@@ -58,6 +58,12 @@ export function useChatState(userRef: MutableRefObject<User>) {
 
   const addMember = async (chatId: string, userId: string) => {
     await chatApi.addMember(chatId, userId);
+    // Re-fetch the chat to get the updated member list.
+    try {
+      const refreshed = await chatApi.getChatById(chatId);
+      const updated = mapChat(refreshed, userRef.current.id);
+      setChats((prev) => prev.map((c) => (c.id === chatId ? updated : c)));
+    } catch {}
   };
 
   const removeMember = async (chatId: string, userId: string) => {

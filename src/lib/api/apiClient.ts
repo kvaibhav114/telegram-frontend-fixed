@@ -1,4 +1,7 @@
-export const API_BASE_URL = "https://telegramrepomb-production-a9f9.up.railway.app";
+// In dev the Vite proxy handles /api → backend, so empty is correct.
+// In production set VITE_API_BASE_URL to the backend origin (e.g. https://api.example.com).
+export const API_BASE_URL: string =
+  (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_API_BASE_URL) || "";
 
 const AUTH_TOKEN_KEY = "telegrok.authToken";
 

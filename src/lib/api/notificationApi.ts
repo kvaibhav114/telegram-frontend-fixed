@@ -14,12 +14,14 @@ export const notificationApi = {
   getUnread: () =>
     apiFetch<Notification[]>("/api/notifications/unread"),
 
-  countUnread: () =>
-    apiFetch<number>("/api/notifications/unread/count"),
+  countUnread: async (): Promise<number> => {
+    const res = await apiFetch<{ count: number }>("/api/notifications/unread/count");
+    return typeof res === "number" ? res : res?.count ?? 0;
+  },
 
   markAsRead: (id: number) =>
-    apiFetch(`/api/notifications/${id}/read`, { method: "POST" }),
+    apiFetch(`/api/notifications/${id}/read`, { method: "PUT" }),
 
   markAllAsRead: () =>
-    apiFetch("/api/notifications/read-all", { method: "POST" }),
+    apiFetch("/api/notifications/read-all", { method: "PUT" }),
 };

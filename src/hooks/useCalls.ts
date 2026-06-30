@@ -174,6 +174,24 @@ user: User,
     return unsubSignal;
   }, [users]);
 
+  // ── Clean up active call when the tab/window closes ────────────────────
+  useEffect(() => {
+    const cleanup = () => {
+      const c = callRef.current;
+      if (c.state === "idle") return;
+      const endpoint = c.state === "outgoing" ? "cancel" : "end";
+      const token = localStorage.getItem("telegrok.authToken");
+      fetch(`/api/calls/${c.callId}/${endpoint}`, {
+        method: "POST",
+        keepalive: true,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }).catch(() => {});
+      webrtcService.reset();
+    };
+    window.addEventListener("beforeunload", cleanup);
+    return () => window.removeEventListener("beforeunload", cleanup);
+  }, []);
+
   // ── actions ─────────────────────────────────────────────────────────────
   const startCall = async (peers: User[], type: CallType) => {
     if (callRef.current.state !== "idle") return;

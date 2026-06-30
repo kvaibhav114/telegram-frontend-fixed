@@ -1,26 +1,36 @@
-// @lovable.dev/vite-tanstack-config already includes the following — do NOT add them manually
-// or the app will break with duplicate plugins:
-//   - tanstackStart, viteReact, tailwindcss, tsConfigPaths, nitro (build-only using cloudflare as a default target),
-//     componentTagger (dev-only), VITE_* env injection, @ path alias, React/TanStack dedupe,
-//     error logger plugins, and sandbox detection (port/host/strictPort).
-// You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
+import basicSsl from "@vitejs/plugin-basic-ssl";
+
+const backendUrl = "http://telegrok-env.eba-mpmkzqcb.ap-south-1.elasticbeanstalk.com";
 
 export default defineConfig({
   vite: {
+    plugins: [basicSsl()],
     server: {
+      host: true,
+      port: 5173,
+      proxy: {
+        "/api": {
+          target: backendUrl,
+          changeOrigin: true,
+          headers: {
+            Origin: backendUrl,
+          },
+        },
+        "/ws": {
+          target: backendUrl,
+          changeOrigin: true,
+          ws: true,
+          headers: {
+            Origin: backendUrl,
+          },
+        },
+      },
       watch: {
-        // This repo is running in an environment that regularly exhausts Linux
-        // inotify watchers. Polling is slower, but it avoids dev-server crashes.
         usePolling: true,
         interval: 1000,
         ignored: ["**/dist/**", "**/.git/**"],
       },
     },
-  },
-  tanstackStart: {
-    // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
-    // nitro/vite builds from this
-    server: { entry: "server" },
   },
 });
