@@ -44,11 +44,13 @@ class WebSocketService {
   }
 
   sendSignal(msg: Record<string, unknown>) {
-    this.client?.publish({ destination: "/app/call.signal", body: JSON.stringify(msg) });
+    if (!this.client?.connected) return;
+    this.client.publish({ destination: "/app/call.signal", body: JSON.stringify(msg) });
   }
 
   sendFileTransferSignal(msg: Record<string, unknown>) {
-    this.client?.publish({
+    if (!this.client?.connected) return;
+    this.client.publish({
       destination: "/app/filetransfer.signal",
       body: JSON.stringify(msg),
     });
@@ -94,7 +96,8 @@ class WebSocketService {
   }
 
   sendMessage(chatId: string, content: string, replyToId?: string) {
-    this.client?.publish({
+    if (!this.client?.connected) return;
+    this.client.publish({
       destination: "/app/chat.send",
       body: JSON.stringify({
         chatId: Number(chatId),
@@ -106,14 +109,16 @@ class WebSocketService {
   }
 
   sendTyping(chatId: string, isTyping: boolean) {
-    this.client?.publish({
+    if (!this.client?.connected) return;
+    this.client.publish({
       destination: "/app/chat.typing",
       body: JSON.stringify({ chatId: Number(chatId), isTyping }),
     });
   }
 
   markAsRead(chatId: string, messageId: string) {
-    this.client?.publish({
+    if (!this.client?.connected) return;
+    this.client.publish({
       destination: "/app/chat.read",
       body: JSON.stringify({ chatId: Number(chatId), messageId: Number(messageId) }),
     });

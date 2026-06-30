@@ -1,13 +1,10 @@
-import { useEffect, useState, type MutableRefObject } from "react";
+import { useState, type MutableRefObject } from "react";
 import type { Chat, Message, User } from "@/lib/types";
 import { messageApi } from "@/lib/api/messageApi";
 import { chatApi } from "@/lib/api/chatApi";
 import { websocketService } from "@/lib/services/websocketService";
 import { mapMessage } from "@/lib/mappers";
 import { formatLocalTime } from "@/lib/time";
-import { webrtcService } from "@/lib/services/webrtcService";
-import type { FileTransferResponse } from "@/lib/api/messageApi";
-import type { WsEvent } from "@/lib/services/websocketService";
 
 type SetChats = (fn: Chat[] | ((prev: Chat[]) => Chat[])) => void;
 
@@ -18,125 +15,6 @@ export function useMessageState(
   const [messagesByChat, setMessagesByChat] = useState<
     Record<string, Message[]>
   >({});
-
-  useEffect(() => {
-    const onTransferEvent = async (event: WsEvent) => {
-      const payload = (event.payload ?? {}) as Partial<FileTransferResponse>;
-      const transferId = String(
-        payload.transferId ?? event.transferId ?? event.callId ?? "",
-      );
-      if (!transferId) return;
-
-      if (event.type === "FILE_TRANSFER_OFFER") {
-        const peerId = Number(payload.senderId ?? event.senderId ?? 0);
-        if (!peerId) return;
-        webrtcService.markFileTransferReady(transferId);
-        if (!webrtcService.hasFileTransfer(transferId)) {
-          webrtcService.createFilePeerConnection(
-            transferId,
-            peerId,
-            (candidate) => {
-              websocketService.sendFileTransferSignal({
-                transferId,
-                receiverId: peerId,
-                type: "ICE_CANDIDATE",
-                payload: JSON.stringify(candidate),
-              });
-            },
-            false,
-          );
-        }
-        return;
-      }
-
-      if (event.type === "FILE_TRANSFER_ACCEPTED") {
-        webrtcService.markFileTransferReady(transferId);
-        return;
-      }
-
-      if (
-        event.type === "FILE_TRANSFER_REJECTED" ||
-        event.type === "FILE_TRANSFER_CANCELLED" ||
-        event.type === "FILE_TRANSFER_COMPLETED"
-      ) {
-        webrtcService.closeFileTransfer(transferId);
-      }
-    };
-
-    const onTransferSignal = async (event: WsEvent) => {
-      const payload =
-        typeof event.payload === "string" ? JSON.parse(event.payload) : event.payload;
-      const transferId = String(
-        (payload as Record<string, unknown> | undefined)?.transferId ??
-          event.transferId ??
-          event.callId ??
-          "",
-      );
-      const peerId = Number(event.senderId ?? event.receiverId ?? 0);
-      if (!transferId || !peerId) return;
-
-      if (event.type === "OFFER") {
-        if (!webrtcService.hasFileTransfer(transferId)) {
-          webrtcService.createFilePeerConnection(
-            transferId,
-            peerId,
-            (candidate) => {
-              websocketService.sendFileTransferSignal({
-                transferId,
-                receiverId: peerId,
-                type: "ICE_CANDIDATE",
-                payload: JSON.stringify(candidate),
-              });
-            },
-            false,
-          );
-        }
-        const desc =
-          typeof event.payload === "string" ? JSON.parse(event.payload) : event.payload;
-        await webrtcService.setFileRemoteDescription(
-          transferId,
-          desc as RTCSessionDescriptionInit,
-        );
-        const answer = await webrtcService.createFileAnswer(transferId);
-        websocketService.sendFileTransferSignal({
-          transferId,
-          receiverId: peerId,
-          type: "ANSWER",
-          payload: JSON.stringify(answer),
-        });
-        return;
-      }
-
-      if (event.type === "ANSWER") {
-        const desc =
-          typeof event.payload === "string" ? JSON.parse(event.payload) : event.payload;
-        await webrtcService.setFileRemoteDescription(
-          transferId,
-          desc as RTCSessionDescriptionInit,
-        );
-        webrtcService.markFileTransferReady(transferId);
-        return;
-      }
-
-      if (event.type === "ICE_CANDIDATE") {
-        const candidate =
-          typeof event.payload === "string" ? JSON.parse(event.payload) : event.payload;
-        if (candidate && typeof candidate === "object" && "candidate" in candidate) {
-          await webrtcService.addFileIceCandidate(
-            transferId,
-            candidate as RTCIceCandidateInit,
-          );
-        }
-      }
-    };
-
-    const unsubEvent = websocketService.onFileTransferEvent(onTransferEvent);
-    const unsubSignal = websocketService.onFileTransferSignal(onTransferSignal);
-    return () => {
-      unsubEvent();
-      unsubSignal();
-    };
-  }, []);
 
   const getMessages = (chatId: string) => messagesByChat[chatId] ?? [];
 
@@ -234,43 +112,7 @@ export function useMessageState(
       return;
     }
 
-    if ("status" in response) {
-      const transferId = String(response.transferId ?? "");
-      const peerId = Number(response.receiverId ?? 0);
-      if (!transferId || !peerId) return;
-
-      webrtcService.createFilePeerConnection(
-        transferId,
-        peerId,
-        (candidate) => {
-          websocketService.sendFileTransferSignal({
-            transferId,
-            receiverId: peerId,
-            type: "ICE_CANDIDATE",
-            payload: JSON.stringify(candidate),
-          });
-        },
-        true,
-      );
-      webrtcService.primeOutgoingFileTransfer(transferId, peerId, file, {
-        fileName: response.originalFileName ?? response.fileName ?? file.name,
-        contentType: response.contentType ?? response.mimeType ?? file.type,
-        sizeBytes: response.fileSize ?? response.sizeBytes ?? file.size,
-        messageId:
-          response.messageId != null ? String(response.messageId) : null,
-        attachmentId:
-          response.attachmentId != null ? String(response.attachmentId) : null,
-      });
-
-      const offer = await webrtcService.createFileOffer(transferId);
-      websocketService.sendFileTransferSignal({
-        transferId,
-        receiverId: peerId,
-        type: "OFFER",
-        payload: JSON.stringify(offer),
-      });
-      return;
-    }
+    if ("status" in response) return;
   };
 
   const sendTyping = (chatId: string, isTyping: boolean) =>
