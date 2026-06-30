@@ -7,6 +7,7 @@ export interface WsEvent<T = unknown> {
   payload?: T;
   chatId?: string | number;
   callId?: string | number;
+  transferId?: string | number;
   senderId?: string | number;
   receiverId?: string | number;
 }
@@ -16,6 +17,7 @@ type CallEventHandler = (event: WsEvent) => void;
 type ChatHandler = (event: WsEvent<MessageResponse>) => void;
 type NotificationHandler = (event: WsEvent) => void;
 type ChatEventHandler = (event: WsEvent) => void;
+type FileTransferHandler = (event: WsEvent) => void;
 
 class WebSocketService {
   private client: Client | null = null;
@@ -25,6 +27,8 @@ class WebSocketService {
   private chatSubs = new Map<string, { unsubscribe: () => void }>();
   private notificationHandlers = new Set<NotificationHandler>();
   private chatEventHandlers = new Set<ChatEventHandler>();
+  private fileTransferHandlers = new Set<FileTransferHandler>();
+  private fileTransferSignalHandlers = new Set<SignalHandler>();
   private userId: number | null = null;
 
   /** WebRTC media signaling only (OFFER / ANSWER / ICE_CANDIDATE). */
@@ -43,6 +47,13 @@ class WebSocketService {
     this.client?.publish({ destination: "/app/call.signal", body: JSON.stringify(msg) });
   }
 
+  sendFileTransferSignal(msg: Record<string, unknown>) {
+    this.client?.publish({
+      destination: "/app/filetransfer.signal",
+      body: JSON.stringify(msg),
+    });
+  }
+
   onNotification(handler: NotificationHandler) {
     this.notificationHandlers.add(handler);
     return () => { this.notificationHandlers.delete(handler); };
@@ -51,6 +62,20 @@ class WebSocketService {
   onChatEvent(handler: ChatEventHandler) {
     this.chatEventHandlers.add(handler);
     return () => { this.chatEventHandlers.delete(handler); };
+  }
+
+  onFileTransferEvent(handler: FileTransferHandler) {
+    this.fileTransferHandlers.add(handler);
+    return () => {
+      this.fileTransferHandlers.delete(handler);
+    };
+  }
+
+  onFileTransferSignal(handler: SignalHandler) {
+    this.fileTransferSignalHandlers.add(handler);
+    return () => {
+      this.fileTransferSignalHandlers.delete(handler);
+    };
   }
 
   subscribeToChat(chatId: string, cb: ChatHandler) {
@@ -128,7 +153,11 @@ class WebSocketService {
         // File transfers still use the signal channel.
         this.client?.subscribe("/user/queue/file-transfers", (frame) => {
           const event = JSON.parse(frame.body) as WsEvent;
-          this.signalHandlers.forEach((h) => h(event));
+          if (isRtcSignalType(event.type)) {
+            this.fileTransferSignalHandlers.forEach((h) => h(event));
+            return;
+          }
+          this.fileTransferHandlers.forEach((h) => h(event));
         });
       },
       onStompError: (frame) => console.error("STOMP error", frame),
@@ -160,6 +189,10 @@ class WebSocketService {
     });
     this.chatSubs.set(chatId, { unsubscribe: () => sub.unsubscribe() });
   }
+}
+
+function isRtcSignalType(type: string) {
+  return type === "OFFER" || type === "ANSWER" || type === "ICE_CANDIDATE";
 }
 
 export const websocketService = new WebSocketService();

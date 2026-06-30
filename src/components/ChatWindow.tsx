@@ -8,7 +8,7 @@ import type { Chat, Message } from "@/lib/types";
 import { formatDateDivider, localDayKey } from "@/lib/time";
 
 export function ChatWindow({ chat }: { chat: Chat }) {
-  const { user, loadMessages, subscribeChat, sendMessage, sendTyping, markAsRead, editMessage } = useApp();
+  const { user, loadMessages, subscribeChat, sendMessage, sendFile, sendTyping, markAsRead, editMessage } = useApp();
   const [messages, setMessages] = useState<Message[]>([]);
   const [showInfo, setShowInfo] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
@@ -83,6 +83,9 @@ export function ChatWindow({ chat }: { chat: Chat }) {
 
         <MessageInput
           onSend={handleSend}
+          onSendFile={(file) => {
+            void sendFile(chat.id, file);
+          }}
           onTyping={(isTyping) => sendTyping(chat.id, isTyping)}
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}

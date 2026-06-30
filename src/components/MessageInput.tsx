@@ -5,6 +5,7 @@ import type { Message } from "@/lib/types";
 
 interface Props {
   onSend: (text: string, replyToId?: string) => void;
+  onSendFile: (file: File) => void;
   onTyping?: (isTyping: boolean) => void;
   replyTo: Message | null;
   onCancelReply: () => void;
@@ -15,6 +16,7 @@ interface Props {
 
 export function MessageInput({
   onSend,
+  onSendFile,
   onTyping,
   replyTo,
   onCancelReply,
@@ -25,7 +27,7 @@ export function MessageInput({
   const [text, setText] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
-
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const typingActive = useRef(false);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -140,9 +142,26 @@ export function MessageInput({
             placeholder="Write a message…"
             className="flex-1 resize-none bg-transparent py-2 px-1 text-sm focus:outline-none placeholder:text-muted-foreground max-h-32"
           />
-          {/* <button className="size-9 grid place-items-center rounded-full hover:bg-accent text-muted-foreground hover:text-primary transition">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="size-9 grid place-items-center rounded-full hover:bg-accent text-muted-foreground hover:text-primary transition"
+          >
             <Paperclip className="size-5" />
-          </button> */}
+          </button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+
+              onSendFile(file);
+
+              e.target.value = "";
+            }}
+          />
           {text.trim() && (
             <button
               onClick={submit}

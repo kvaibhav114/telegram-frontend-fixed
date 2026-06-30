@@ -55,6 +55,7 @@ export interface AppCtx {
   endCall: () => void;
   subscribeChat: (chatId: string, cb: (msgs: Message[]) => void) => () => void;
   sendMessage: (chatId: string, text: string, replyToId?: string) => void;
+  sendFile: (chatId: string, file: File) => Promise<any>;
   sendTyping: (chatId: string, isTyping: boolean) => void;
   markAsRead: (chatId: string, messageId: string) => void;
   loadMessages: (chatId: string) => Promise<Message[]>;
@@ -162,6 +163,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loadMessages: msgState.loadMessages,
     subscribeChat: msgState.subscribeChat,
     sendMessage: msgState.sendMessage,
+    sendFile: msgState.sendFile,
     sendTyping: msgState.sendTyping,
     markAsRead: (chatId, messageId) => {
       msgState.markAsRead(chatId, messageId);

@@ -19,11 +19,24 @@ export interface MessageResponse {
   senderAvatarUrl: string | null;
   type: MessageType;
   content: string;
+  attachments?: AttachmentResponse[];
   replyToId: number | null;
   replyToContent: string | null;
   isEdited: boolean;
   createdAt: string;
   editedAt: string | null;
+}
+
+export interface AttachmentResponse {
+  id?: number | string | null;
+  fileName?: string | null;
+  originalFileName?: string | null;
+  contentType?: string | null;
+  mimeType?: string | null;
+  fileSize?: number | null;
+  sizeBytes?: number | null;
+  fileUrl?: string | null;
+  transferId?: number | string | null;
 }
 
 export interface PinnedMessageResponse {
