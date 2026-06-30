@@ -4,7 +4,7 @@ import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/context/AppContext";
 import { formatLocalTime } from "@/lib/time";
-import { API_BASE_URL } from "@/lib/api/apiClient";
+import { API_BASE_URL, getAuthToken } from "@/lib/api/apiClient";
 
 interface Props {
   msg: Message;
@@ -18,6 +18,7 @@ export function MessageBubble({ msg, showAvatar, isGroup, onReply, onEdit }: Pro
   const { user, deleteMessage, pinMessage } = useApp();
   const isMine = msg.senderId === user.id;
   const [menu, setMenu] = useState(false);
+  const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
   const menuRef = useRef<HTMLDivElement>(null);
 
  const time = formatLocalTime(msg.createdAt);
@@ -29,6 +30,58 @@ export function MessageBubble({ msg, showAvatar, isGroup, onReply, onEdit }: Pro
     return () => document.removeEventListener("mousedown", close);
   }, [menu]);
 
+  useEffect(() => {
+    const attachments = msg.attachments ?? [];
+    const token = getAuthToken();
+    if (attachments.length === 0 || !token) {
+      setAttachmentUrls({});
+      return;
+    }
+
+    let cancelled = false;
+    const createdUrls: string[] = [];
+
+    void (async () => {
+      const nextEntries = await Promise.all(
+        attachments.map(async (attachment) => {
+          if (!attachment.fileUrl) {
+            return [attachment.id ?? attachment.fileName, ""] as const;
+          }
+
+          try {
+            const response = await fetch(`${API_BASE_URL}${attachment.fileUrl}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) {
+              return [attachment.id ?? attachment.fileName, ""] as const;
+            }
+
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            createdUrls.push(objectUrl);
+            return [attachment.id ?? attachment.fileName, objectUrl] as const;
+          } catch {
+            return [attachment.id ?? attachment.fileName, ""] as const;
+          }
+        }),
+      );
+
+      if (cancelled) {
+        createdUrls.forEach((url) => URL.revokeObjectURL(url));
+        return;
+      }
+
+      setAttachmentUrls(
+        Object.fromEntries(nextEntries.filter(([, url]) => Boolean(url))),
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+      createdUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [msg.attachments]);
+
   const actions = [
     { icon: CornerUpLeft, label: "Reply", action: () => { onReply(msg); setMenu(false); } },
     ...(isMine ? [{ icon: Pencil, label: "Edit", action: () => { onEdit(msg); setMenu(false); } }] : []),
@@ -39,10 +92,7 @@ export function MessageBubble({ msg, showAvatar, isGroup, onReply, onEdit }: Pro
 
   const attachments = (msg.attachments ?? []).map((attachment) => ({
     ...attachment,
-    resolvedUrl: attachment.fileUrl ? `${API_BASE_URL}${attachment.fileUrl}` : null,
-    thumbnailSrc: attachment.thumbnailUrl
-      ? `${API_BASE_URL}${attachment.thumbnailUrl}`
-      : null,
+    resolvedUrl: attachmentUrls[attachment.id ?? attachment.fileName] ?? null,
   }));
 
   return (
@@ -92,7 +142,6 @@ export function MessageBubble({ msg, showAvatar, isGroup, onReply, onEdit }: Pro
                     <video
                       key={`${attachment.id ?? attachment.fileName}-${index}`}
                       controls
-                      poster={attachment.thumbnailSrc ?? undefined}
                       className="max-h-72 w-full rounded-xl"
                       src={attachment.resolvedUrl}
                     />
