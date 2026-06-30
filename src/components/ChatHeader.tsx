@@ -34,7 +34,7 @@ export function ChatHeader({ chat, onInfo }: { chat: Chat; onInfo?: () => void }
 
   useEffect(() => {
     chatApi.getPinnedMessages(chat.id).then((r) => setPins(r.map(toPinnedMsg))).catch(() => {});
-    // Check block status for private chats
+    
     if (!isGroup && otherMember) {
       userApi.getBlockedUsers().then((list) => {
         setBlocked(list.some((u) => String(u.id) === otherMember.userId));

@@ -1,36 +1,40 @@
 import type { CallType } from "@/lib/types";
 
+
+const ICE_CONFIG: RTCConfiguration = {
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+  // TODO: add a TURN server before going past LAN / for symmetric-NAT peers.
+};
+
+type RemoteStreamHandler = (peerId: number, stream: MediaStream) => void;
+type PeerClosedHandler = (peerId: number) => void;
+type LocalStreamHandler = (stream: MediaStream) => void;
+
 class WebRTCService {
   private localStream: MediaStream | null = null;
-  private peerConnection: RTCPeerConnection | null = null;
-  private remoteStream: MediaStream | null = null;
-
-  private onRemoteStreamCallback: ((stream: MediaStream) => void) | null = null;
-  private onLocalStreamCallback: ((stream: MediaStream) => void) | null = null;
-
-  private pendingCandidates: RTCIceCandidateInit[] = [];
   private activeCallType: CallType | null = null;
 
+  private peers = new Map<number, RTCPeerConnection>();
+  private remoteStreams = new Map<number, MediaStream>();
+  private pendingCandidates = new Map<number, RTCIceCandidateInit[]>();
+
+  private onRemoteStream: RemoteStreamHandler | null = null;
+  private onPeerClosed: PeerClosedHandler | null = null;
+  private onLocalStream: LocalStreamHandler | null = null;
+
+  // ---- local media -------------------------------------------------------
+
   async startLocalMedia(callType: CallType = "VIDEO") {
-    if (this.localStream && this.activeCallType === callType)
-      return this.localStream;
+    if (this.localStream && this.activeCallType === callType) return this.localStream;
     this.stopLocalMedia();
     this.activeCallType = callType;
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia({
         video:
           callType === "VIDEO"
-            ? {
-                width: { ideal: 640 },
-                height: { ideal: 480 },
-                frameRate: { ideal: 24 },
-              }
+            ? { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } }
             : false,
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
     } catch (err) {
       this.activeCallType = null;
@@ -39,106 +43,131 @@ class WebRTCService {
       }
       throw new Error("Could not access camera/microphone. Please check your device.");
     }
-    this.onLocalStreamCallback?.(this.localStream);
+    this.onLocalStream?.(this.localStream);
     return this.localStream;
   }
 
-  createPeerConnection() {
-    this.peerConnection?.close();
-    this.peerConnection = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-    });
+  // ---- per-peer connections ---------------------------------------------
 
-    this.remoteStream = new MediaStream();
-    this.peerConnection.ontrack = (e) => {
-      this.remoteStream = e.streams[0];
+  /** Create (or return existing) connection to a remote peer. */
+  createPeerConnection(peerId: number, onIce: (candidate: RTCIceCandidate) => void) {
+    const existing = this.peers.get(peerId);
+    if (existing) return existing;
 
-      if (this.onRemoteStreamCallback) {
-        this.onRemoteStreamCallback(e.streams[0]);
+    const pc = new RTCPeerConnection(ICE_CONFIG);
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate) onIce(e.candidate);
+    };
+
+    pc.ontrack = (e) => {
+      const stream = e.streams[0];
+      this.remoteStreams.set(peerId, stream);
+      this.onRemoteStream?.(peerId, stream);
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "failed" || pc.connectionState === "closed") {
+        this.closePeer(peerId);
       }
     };
 
-    return this.peerConnection;
+    this.peers.set(peerId, pc);
+    this.attachLocalTracks(peerId);
+    return pc;
   }
 
-  attachLocalTracks() {
-    if (!this.localStream || !this.peerConnection) return;
-
-    const senders = this.peerConnection.getSenders();
-
+  attachLocalTracks(peerId: number) {
+    const pc = this.peers.get(peerId);
+    if (!this.localStream || !pc) return;
+    const senders = pc.getSenders();
     this.localStream.getTracks().forEach((track) => {
-      const exists = senders.some((sender) => sender.track?.id === track.id);
-
-      if (!exists) {
-        this.peerConnection!.addTrack(track, this.localStream!);
+      if (!senders.some((sn) => sn.track?.id === track.id)) {
+        pc.addTrack(track, this.localStream!);
       }
     });
   }
 
-  async createOffer() {
-    if (!this.peerConnection) throw new Error("No peer connection");
-    const offer = await this.peerConnection.createOffer();
-    await this.peerConnection.setLocalDescription(offer);
+  async createOffer(peerId: number) {
+    const pc = this.peers.get(peerId);
+    if (!pc) throw new Error(`No peer connection for ${peerId}`);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
     return offer;
   }
 
-  async createAnswer() {
-    if (!this.peerConnection) throw new Error("No peer connection");
-    const answer = await this.peerConnection.createAnswer();
-    await this.peerConnection.setLocalDescription(answer);
+  async createAnswer(peerId: number) {
+    const pc = this.peers.get(peerId);
+    if (!pc) throw new Error(`No peer connection for ${peerId}`);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
     return answer;
   }
 
-  async setRemoteDescription(desc: RTCSessionDescriptionInit) {
-    if (!this.peerConnection) throw new Error("No peer connection");
-    await this.peerConnection.setRemoteDescription(desc);
-    for (const c of this.pendingCandidates) {
-      await this.peerConnection.addIceCandidate(new RTCIceCandidate(c));
-    }
-    this.pendingCandidates = [];
+  async setRemoteDescription(peerId: number, desc: RTCSessionDescriptionInit) {
+    const pc = this.peers.get(peerId);
+    if (!pc) throw new Error(`No peer connection for ${peerId}`);
+    await pc.setRemoteDescription(desc);
+    const queued = this.pendingCandidates.get(peerId) ?? [];
+    for (const c of queued) await pc.addIceCandidate(new RTCIceCandidate(c));
+    this.pendingCandidates.delete(peerId);
   }
 
-  async addIceCandidate(candidate: RTCIceCandidateInit) {
-    if (!this.peerConnection) return;
-    if (!this.peerConnection.remoteDescription) {
-      this.pendingCandidates.push(candidate);
+  async addIceCandidate(peerId: number, candidate: RTCIceCandidateInit) {
+    const pc = this.peers.get(peerId);
+    if (!pc) return;
+    if (!pc.remoteDescription) {
+      const list = this.pendingCandidates.get(peerId) ?? [];
+      list.push(candidate);
+      this.pendingCandidates.set(peerId, list);
       return;
     }
-    await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+    await pc.addIceCandidate(new RTCIceCandidate(candidate));
   }
+
+  hasPeer(peerId: number) {
+    return this.peers.has(peerId);
+  }
+
+  closePeer(peerId: number) {
+    this.peers.get(peerId)?.close();
+    this.peers.delete(peerId);
+    this.remoteStreams.delete(peerId);
+    this.pendingCandidates.delete(peerId);
+    this.onPeerClosed?.(peerId);
+  }
+
+  // ---- accessors / device toggles ---------------------------------------
 
   getLocalStream() {
     return this.localStream;
   }
-  getRemoteStream() {
-    return this.remoteStream;
+  getRemoteStream(peerId: number) {
+    return this.remoteStreams.get(peerId) ?? null;
   }
-  getPeerConnection() {
-    return this.peerConnection;
+  getRemoteStreams() {
+    return new Map(this.remoteStreams);
   }
 
   setMicrophoneEnabled(on: boolean) {
-    this.localStream?.getAudioTracks().forEach((t) => {
-      t.enabled = on;
-    });
+    this.localStream?.getAudioTracks().forEach((t) => (t.enabled = on));
   }
-
-  setOnRemoteStream(callback: (stream: MediaStream) => void) {
-    this.onRemoteStreamCallback = callback;
-  }
-
-  setOnLocalStream(callback: (stream: MediaStream) => void) {
-    this.onLocalStreamCallback = callback;
-    if (this.localStream) {
-      callback(this.localStream);
-    }
-  }
-
   setCameraEnabled(on: boolean) {
-    this.localStream?.getVideoTracks().forEach((t) => {
-      t.enabled = on;
-    });
+    this.localStream?.getVideoTracks().forEach((t) => (t.enabled = on));
   }
+
+  setOnRemoteStream(cb: RemoteStreamHandler) {
+    this.onRemoteStream = cb;
+  }
+  setOnPeerClosed(cb: PeerClosedHandler) {
+    this.onPeerClosed = cb;
+  }
+  setOnLocalStream(cb: LocalStreamHandler) {
+    this.onLocalStream = cb;
+    if (this.localStream) cb(this.localStream);
+  }
+
+  // ---- teardown ----------------------------------------------------------
 
   stopLocalMedia() {
     this.localStream?.getTracks().forEach((t) => t.stop());
@@ -147,11 +176,14 @@ class WebRTCService {
   }
 
   reset() {
+    this.peers.forEach((pc) => pc.close());
+    this.peers.clear();
+    this.remoteStreams.clear();
+    this.pendingCandidates.clear();
     this.stopLocalMedia();
-    this.peerConnection?.close();
-    this.peerConnection = null;
-    this.remoteStream = null;
-    this.pendingCandidates = [];
+    this.onRemoteStream = null;
+    this.onPeerClosed = null;
+    this.onLocalStream = null;
   }
 }
 

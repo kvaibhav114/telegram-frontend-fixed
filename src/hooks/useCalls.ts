@@ -1,126 +1,240 @@
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
-import type { CallState, CallType, User } from "@/lib/types";
+import type { CallState, CallType, User, CallParticipant } from "@/lib/types";
+import type { CallResponse, ParticipantResponse } from "@/lib/api/callApi";
 import { callApi } from "@/lib/api/callApi";
 import { websocketService } from "@/lib/services/websocketService";
 import { webrtcService } from "@/lib/services/webrtcService";
 
+
 export function useCallSignaling(
-  user: User,
+user: User,
   users: Record<string, User>,
   userRef: MutableRefObject<User>,
 ) {
   const [call, setCall] = useState<CallState>({ state: "idle" });
   const callRef = useRef(call);
-  const updateCall = (next: CallState) => { callRef.current = next; setCall(next); };
+  const updateCall = (next: CallState) => {
+    callRef.current = next;
+    setCall(next);
+  };
 
-  const getPeer = (senderId: number): User =>
-    users[String(senderId)] ?? {
-      id: String(senderId), username: "", displayName: `User ${senderId}`,
-      email: "", bio: "", avatarUrl: `https://i.pravatar.cc/150?u=${senderId}`,
-      isOnline: true, lastSeenAt: null,
-    };
+  const myId = () => Number(userRef.current.id);
 
-  // WebSocket signal handler
+  // Map a backend ParticipantResponse → local CallParticipant.
+  const toLocalParticipant = (p: ParticipantResponse, meId: number): CallParticipant => ({
+    userId: String(p.userId),
+    name: p.name,
+    avatarUrl: p.avatarUrl,
+    status: p.status,
+    role: p.role,
+    muted: p.muted,
+    cameraEnabled: p.cameraEnabled,
+    screenSharing: p.screenSharing,
+    self: p.userId === meId,
+    stream: webrtcService.getRemoteStream(p.userId) ?? undefined,
+  });
+
+  const mapParticipants = (resp: CallResponse, meId: number) =>
+    resp.participants.map((p) => toLocalParticipant(p, meId));
+
+  // ── outgoing media setup to a single peer (mesh edge) ──────────────────
+  const connectToPeer = async (peerId: number, type: CallType, shouldOffer: boolean) => {
+    if (peerId === myId() || webrtcService.hasPeer(peerId)) return;
+    await webrtcService.startLocalMedia(type);
+    webrtcService.createPeerConnection(peerId, (candidate) => {
+      websocketService.sendSignal({
+        callId: callRef.current.state !== "idle" ? callRef.current.callId : "",
+        receiverId: peerId,
+        type: "ICE_CANDIDATE",
+        payload: JSON.stringify(candidate),
+      });
+    });
+    if (shouldOffer) {
+      const offer = await webrtcService.createOffer(peerId);
+      websocketService.sendSignal({
+        callId: callRef.current.state !== "idle" ? callRef.current.callId : "",
+        receiverId: peerId,
+        type: "OFFER",
+        payload: JSON.stringify(offer),
+      });
+    }
+  };
+
+  // When we (re)enter active state, mesh-connect to every other JOINED peer.
+  const meshConnectJoined = async (participants: CallParticipant[], type: CallType) => {
+    const me = myId();
+    for (const p of participants) {
+      const pid = Number(p.userId);
+      if (pid === me || p.status !== "JOINED") continue;
+      // higher id offers → exactly one offerer per pair
+      await connectToPeer(pid, type, me > pid);
+    }
+  };
+
+  // ── lifecycle events on /queue/calls ───────────────────────────────────
   useEffect(() => {
-    const unsub = websocketService.onSignal(async (msg) => {
-      const parsePayload = (payload: unknown): Record<string, unknown> | undefined => {
-        if (!payload) return undefined;
-        if (typeof payload === "string") {
-          try { const p = JSON.parse(payload); return p && typeof p === "object" ? p : undefined; } catch { return undefined; }
+    const unsubCalls = websocketService.onCallEvent(async (msg) => {
+      const resp = msg.payload as CallResponse | undefined;
+      const me = myId();
+
+      switch (msg.type) {
+        case "INCOMING_CALL": {
+          if (!resp || callRef.current.state !== "idle") return;
+          updateCall({
+            state: "incoming",
+            callId: String(resp.callId),
+            type: resp.callType,
+            creatorId: String(resp.creatorId),
+            creatorName: resp.creatorName,
+            creatorAvatarUrl: resp.creatorAvatarUrl,
+            participants: mapParticipants(resp, me),
+          });
+          return;
         }
-        return typeof payload === "object" ? (payload as Record<string, unknown>) : undefined;
-      };
+        case "PARTICIPANT_JOINED":
+        case "PARTICIPANT_LEFT":
+        case "PARTICIPANT_REJECTED": {
+          const c = callRef.current;
+          if (!resp || c.state === "idle" || String(resp.callId) !== c.callId) return;
+          const participants = mapParticipants(resp, me);
 
-      const p = parsePayload(msg.payload);
-      const senderId = Number(msg.senderId ?? p?.callerId ?? p?.senderId ?? 0);
-      const callId = String(msg.callId ?? p?.callId ?? "");
-      const resolveCallType = (): CallType => (p?.callType === "VOICE" || p?.callType === "VIDEO") ? p.callType as CallType : "VIDEO";
+          // Creator: first remote JOINED promotes outgoing → active.
+          const nextState: CallState["state"] =
+            c.state === "outgoing" && msg.type === "PARTICIPANT_JOINED" ? "active" : c.state;
 
-      if (msg.type === "CALL_REQUEST" || msg.type === "INCOMING_CALL") {
-        updateCall({ state: "incoming", peer: getPeer(senderId), type: resolveCallType(), callId });
-        return;
+          updateCall({ ...c, state: nextState, participants } as CallState);
+
+          if (nextState === "active") {
+            if (msg.type === "PARTICIPANT_JOINED") {
+              await meshConnectJoined(participants, c.type);
+            } else {
+              // someone left/rejected → tear down their edge
+              resp.participants
+                .filter((p) => p.status === "LEFT" || p.status === "REJECTED")
+                .forEach((p) => webrtcService.closePeer(p.userId));
+            }
+          }
+          return;
+        }
+        case "CALL_ENDED":
+        case "CALL_CANCELLED":
+        case "CALL_MISSED": {
+          const c = callRef.current;
+          if (c.state === "idle" || (resp && String(resp.callId) !== c.callId)) return;
+          webrtcService.reset();
+          updateCall({ state: "idle" });
+          return;
+        }
+        default:
+          return;
       }
+    });
+    return unsubCalls;
+  }, [users]);
 
-      if (msg.type === "CALL_ACCEPT" || msg.type === "CALL_ACCEPTED") {
-        const active = callRef.current;
-        if (active.state !== "outgoing") return;
-        updateCall({ state: "active", peer: active.peer, type: active.type, callId: active.callId });
-        try { await webrtcService.startLocalMedia(active.type); } catch { webrtcService.reset(); updateCall({ state: "idle" }); return; }
-        const pc = webrtcService.createPeerConnection();
-        pc.onicecandidate = (e) => { if (e.candidate) websocketService.sendSignal({ callId: active.callId, receiverId: senderId, type: "ICE_CANDIDATE", payload: JSON.stringify(e.candidate) }); };
-        webrtcService.attachLocalTracks();
-        const offer = await webrtcService.createOffer();
-        websocketService.sendSignal({ callId: active.callId, receiverId: senderId, type: "OFFER", payload: JSON.stringify(offer) });
-        return;
-      }
+  // ── WebRTC media signaling on /queue/signal ────────────────────────────
+  useEffect(() => {
+    const unsubSignal = websocketService.onSignal(async (msg) => {
+      const c = callRef.current;
+      if (c.state === "idle") return;
 
-      if (msg.type === "ICE_CANDIDATE") {
-        const c = typeof msg.payload === "string" ? JSON.parse(msg.payload as string) : msg.payload;
-        if (c?.candidate) await webrtcService.addIceCandidate(c);
-        return;
-      }
+      const senderId = Number(msg.senderId ?? 0);
+      if (!senderId) return;
+      const type = c.type;
 
       if (msg.type === "OFFER") {
-        const active = callRef.current;
-        if (active.state === "idle") return;
-        updateCall({ state: "active", peer: active.peer, type: active.type, callId });
-        try { await webrtcService.startLocalMedia(active.type); } catch { webrtcService.reset(); updateCall({ state: "idle" }); return; }
-        const pc = webrtcService.createPeerConnection();
-        pc.onicecandidate = (e) => { if (e.candidate) websocketService.sendSignal({ callId, receiverId: senderId, type: "ICE_CANDIDATE", payload: JSON.stringify(e.candidate) }); };
-        webrtcService.attachLocalTracks();
-        const desc = typeof msg.payload === "string" ? JSON.parse(msg.payload as string) : msg.payload;
-        await webrtcService.setRemoteDescription(desc);
-        const answer = await webrtcService.createAnswer();
-        websocketService.sendSignal({ callId, receiverId: senderId, type: "ANSWER", payload: JSON.stringify(answer) });
+        // Ensure a connection exists (we are the answerer for this edge).
+        if (!webrtcService.hasPeer(senderId)) {
+          await connectToPeer(senderId, type, /* shouldOffer */ false);
+        }
+        const desc = typeof msg.payload === "string" ? JSON.parse(msg.payload) : msg.payload;
+        await webrtcService.setRemoteDescription(senderId, desc);
+        const answer = await webrtcService.createAnswer(senderId);
+        websocketService.sendSignal({
+          callId: c.callId,
+          receiverId: senderId,
+          type: "ANSWER",
+          payload: JSON.stringify(answer),
+        });
         return;
       }
 
       if (msg.type === "ANSWER") {
-        const desc = typeof msg.payload === "string" ? JSON.parse(msg.payload as string) : msg.payload;
-        await webrtcService.setRemoteDescription(desc);
+        const desc = typeof msg.payload === "string" ? JSON.parse(msg.payload) : msg.payload;
+        await webrtcService.setRemoteDescription(senderId, desc);
         return;
       }
 
-      if (["CALL_REJECT", "CALL_REJECTED", "CALL_END", "CALL_ENDED", "CALL_CANCELLED", "CALL_MISSED"].includes(msg.type)) {
-        webrtcService.reset();
-        updateCall({ state: "idle" });
+      if (msg.type === "ICE_CANDIDATE") {
+        const cand = typeof msg.payload === "string" ? JSON.parse(msg.payload) : msg.payload;
+        if (cand?.candidate) await webrtcService.addIceCandidate(senderId, cand);
+        return;
       }
     });
-    return unsub;
+    return unsubSignal;
   }, [users]);
 
-  const startCall = async (peer: User, type: CallType) => {
-    if (callRef.current.state !== "idle" || !user.id || user.id === "0" || peer.id === user.id) return;
+  // ── actions ─────────────────────────────────────────────────────────────
+  const startCall = async (peers: User[], type: CallType) => {
+    if (callRef.current.state !== "idle") return;
+    const me = userRef.current;
+    if (!me.id || me.id === "0") return;
+    const ids = peers.map((p) => Number(p.id)).filter((id) => id && String(id) !== me.id);
+    if (ids.length === 0) return;
     try {
-      const resp = await callApi.initiate(Number(peer.id), type);
-      updateCall({ state: "outgoing", peer, type, callId: String(resp.callId) });
-      websocketService.sendSignal({ callId: resp.callId, receiverId: Number(peer.id), type: "CALL_REQUEST", payload: JSON.stringify({ callType: type }) });
-    } catch (err) { console.error("Failed to initiate call", err); }
+      const resp = await callApi.initiate(ids, type);
+      // We are auto-JOINED by the backend; start our local media now.
+      await webrtcService.startLocalMedia(type);
+      updateCall({
+        state: "outgoing",
+        callId: String(resp.callId),
+        type,
+        creatorId: String(resp.creatorId),
+        participants: mapParticipants(resp, Number(me.id)),
+      });
+    } catch (err) {
+      console.error("Failed to initiate call", err);
+      webrtcService.reset();
+    }
   };
 
-  const acceptCall = () => {
+  const acceptCall = async () => {
     const c = callRef.current;
     if (c.state !== "incoming") return;
-    callApi.accept(c.callId).catch(console.error);
-    websocketService.sendSignal({ callId: c.callId, receiverId: Number(c.peer.id), type: "CALL_ACCEPT", payload: JSON.stringify({ callType: c.type }) });
-    updateCall({ state: "active", peer: c.peer, type: c.type, callId: c.callId });
+    try {
+      const resp = await callApi.accept(c.callId);
+      await webrtcService.startLocalMedia(c.type);
+      const participants = mapParticipants(resp, myId());
+      updateCall({
+        state: "active",
+        callId: c.callId,
+        type: c.type,
+        creatorId: c.creatorId,
+        participants,
+      });
+      await meshConnectJoined(participants, c.type);
+    } catch (err) {
+      console.error("Failed to accept call", err);
+      webrtcService.reset();
+      updateCall({ state: "idle" });
+    }
   };
 
   const rejectCall = () => {
     const c = callRef.current;
     if (c.state !== "incoming") return;
-    websocketService.sendSignal({ callId: c.callId, receiverId: Number(c.peer.id), type: "CALL_REJECT", payload: JSON.stringify({ callType: c.type }) });
     callApi.reject(c.callId).catch(console.error);
-    webrtcService.reset(); updateCall({ state: "idle" });
+    webrtcService.reset();
+    updateCall({ state: "idle" });
   };
 
   const endCall = () => {
     const c = callRef.current;
     if (c.state !== "idle") {
-      websocketService.sendSignal({ callId: c.callId, receiverId: Number(c.peer.id), type: "CALL_END", payload: "{}" });
       (c.state === "outgoing" ? callApi.cancel(c.callId) : callApi.end(c.callId)).catch(console.error);
     }
-    webrtcService.reset(); updateCall({ state: "idle" });
+    webrtcService.reset();
+    updateCall({ state: "idle" });
   };
 
   return { call, startCall, acceptCall, rejectCall, endCall };
