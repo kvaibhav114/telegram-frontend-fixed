@@ -7,6 +7,7 @@ export interface WsEvent<T = unknown> {
   payload?: T;
   chatId?: string | number;
   callId?: string | number;
+  transferId?: string | number;
   senderId?: string | number;
   receiverId?: string | number;
 }
@@ -42,7 +43,16 @@ class WebSocketService {
   }
 
   sendSignal(msg: Record<string, unknown>) {
-    this.client?.publish({ destination: "/app/call.signal", body: JSON.stringify(msg) });
+    if (!this.client?.connected) return;
+    this.client.publish({ destination: "/app/call.signal", body: JSON.stringify(msg) });
+  }
+
+  sendFileTransferSignal(msg: Record<string, unknown>) {
+    if (!this.client?.connected) return;
+    this.client.publish({
+      destination: "/app/filetransfer.signal",
+      body: JSON.stringify(msg),
+    });
   }
 
   onNotification(handler: NotificationHandler) {
@@ -76,7 +86,8 @@ class WebSocketService {
   }
 
   sendMessage(chatId: string, content: string, replyToId?: string) {
-    this.client?.publish({
+    if (!this.client?.connected) return;
+    this.client.publish({
       destination: "/app/chat.send",
       body: JSON.stringify({
         chatId: Number(chatId),
@@ -88,14 +99,16 @@ class WebSocketService {
   }
 
   sendTyping(chatId: string, isTyping: boolean) {
-    this.client?.publish({
+    if (!this.client?.connected) return;
+    this.client.publish({
       destination: "/app/chat.typing",
       body: JSON.stringify({ chatId: Number(chatId), isTyping }),
     });
   }
 
   markAsRead(chatId: string, messageId: string) {
-    this.client?.publish({
+    if (!this.client?.connected) return;
+    this.client.publish({
       destination: "/app/chat.read",
       body: JSON.stringify({ chatId: Number(chatId), messageId: Number(messageId) }),
     });
@@ -138,7 +151,11 @@ class WebSocketService {
         // File transfers still use the signal channel.
         this.client?.subscribe("/user/queue/file-transfers", (frame) => {
           const event = JSON.parse(frame.body) as WsEvent;
-          this.signalHandlers.forEach((h) => h(event));
+          if (isRtcSignalType(event.type)) {
+            this.fileTransferSignalHandlers.forEach((h) => h(event));
+            return;
+          }
+          this.fileTransferHandlers.forEach((h) => h(event));
         });
         // Presence updates (online/offline).
         this.client?.subscribe("/topic/presence", (frame) => {
@@ -175,6 +192,10 @@ class WebSocketService {
     });
     this.chatSubs.set(chatId, { unsubscribe: () => sub.unsubscribe() });
   }
+}
+
+function isRtcSignalType(type: string) {
+  return type === "OFFER" || type === "ANSWER" || type === "ICE_CANDIDATE";
 }
 
 export const websocketService = new WebSocketService();

@@ -1,6 +1,6 @@
 
 import type { Chat, Message, User } from "@/lib/types";
-import type { ChatResponse, MessageResponse } from "@/lib/api/chatApi";
+import type { AttachmentResponse, ChatResponse, MessageResponse } from "@/lib/api/chatApi";
 import type { UserProfileResponse } from "@/lib/api/userApi";
 import { formatLocalTime } from "@/lib/time";
 
@@ -33,11 +33,23 @@ export function mapMessage(r: MessageResponse): Message {
     senderAvatarUrl: r.senderAvatarUrl ?? `https://i.pravatar.cc/150?u=${r.senderId}`,
     type: r.type ?? "TEXT",
     content: r.content ?? "",
+    attachments: r.attachments?.map(mapAttachment),
     replyToId: r.replyToId ? s(r.replyToId) : null,
     replyToContent: r.replyToContent ?? null,
     isEdited: r.isEdited ?? false,
     createdAt: r.createdAt ?? new Date().toISOString(),
     status: "sent",
+  };
+}
+
+function mapAttachment(r: AttachmentResponse) {
+  return {
+    id: r.id != null ? s(r.id) : null,
+    fileName: r.fileName ?? "Attachment",
+    mimeType: r.mimeType ?? null,
+    fileSize: r.fileSize ?? null,
+    fileUrl: r.fileUrl ?? null,
+    thumbnailUrl: r.thumbnailUrl ?? null,
   };
 }
 

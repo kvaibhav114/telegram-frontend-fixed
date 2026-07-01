@@ -1,4 +1,4 @@
-import { useRef, useState, type MutableRefObject } from "react";
+import { useState, type MutableRefObject } from "react";
 import type { Chat, Message, User } from "@/lib/types";
 import { messageApi } from "@/lib/api/messageApi";
 import { chatApi } from "@/lib/api/chatApi";
@@ -105,6 +105,10 @@ export function useMessageState(
   const sendMessage = (chatId: string, text: string, replyToId?: string) =>
     websocketService.sendMessage(chatId, text, replyToId);
 
+  const sendFile = async (chatId: string, file: File) => {
+    await messageApi.sendFile(Number(chatId), file);
+  };
+
   const sendTyping = (chatId: string, isTyping: boolean) =>
     websocketService.sendTyping(chatId, isTyping);
 
@@ -136,6 +140,7 @@ export function useMessageState(
     loadMessages,
     subscribeChat,
     sendMessage,
+    sendFile,
     sendTyping,
     markAsRead,
     editMessage,

@@ -52,11 +52,21 @@ export interface Message {
   senderAvatarUrl: string;
   type: MessageType;
   content: string;
+  attachments?: Attachment[];
   replyToId: string | null;
   replyToContent: string | null;
   isEdited: boolean;
   createdAt: string;
   status: "sent" | "delivered" | "read";
+}
+
+export interface Attachment {
+  id: string | null;
+  fileName: string;
+  mimeType: string | null;
+  fileSize: number | null;
+  fileUrl: string | null;
+  thumbnailUrl: string | null;
 }
 
 export interface PinnedMessage {
