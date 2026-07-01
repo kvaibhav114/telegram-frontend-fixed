@@ -17,7 +17,11 @@ type CallEventHandler = (event: WsEvent) => void;
 type ChatHandler = (event: WsEvent<MessageResponse>) => void;
 type NotificationHandler = (event: WsEvent) => void;
 type ChatEventHandler = (event: WsEvent) => void;
-type PresenceHandler = (data: { userId: number; isOnline: boolean; lastSeenAt?: string }) => void;
+type PresenceHandler = (data: {
+  userId: number;
+  isOnline: boolean;
+  lastSeenAt?: string;
+}) => void;
 
 class WebSocketService {
   private client: Client | null = null;
@@ -33,18 +37,25 @@ class WebSocketService {
   /** WebRTC media signaling only (OFFER / ANSWER / ICE_CANDIDATE). */
   onSignal(handler: SignalHandler) {
     this.signalHandlers.add(handler);
-    return () => { this.signalHandlers.delete(handler); };
+    return () => {
+      this.signalHandlers.delete(handler);
+    };
   }
 
   /** Call lifecycle events (INCOMING_CALL, PARTICIPANT_*, CALL_ENDED, …). */
   onCallEvent(handler: CallEventHandler) {
     this.callEventHandlers.add(handler);
-    return () => { this.callEventHandlers.delete(handler); };
+    return () => {
+      this.callEventHandlers.delete(handler);
+    };
   }
 
   sendSignal(msg: Record<string, unknown>) {
     if (!this.client?.connected) return;
-    this.client.publish({ destination: "/app/call.signal", body: JSON.stringify(msg) });
+    this.client.publish({
+      destination: "/app/call.signal",
+      body: JSON.stringify(msg),
+    });
   }
 
   sendFileTransferSignal(msg: Record<string, unknown>) {
@@ -57,17 +68,23 @@ class WebSocketService {
 
   onNotification(handler: NotificationHandler) {
     this.notificationHandlers.add(handler);
-    return () => { this.notificationHandlers.delete(handler); };
+    return () => {
+      this.notificationHandlers.delete(handler);
+    };
   }
 
   onChatEvent(handler: ChatEventHandler) {
     this.chatEventHandlers.add(handler);
-    return () => { this.chatEventHandlers.delete(handler); };
+    return () => {
+      this.chatEventHandlers.delete(handler);
+    };
   }
 
   onPresence(handler: PresenceHandler) {
     this.presenceHandlers.add(handler);
-    return () => { this.presenceHandlers.delete(handler); };
+    return () => {
+      this.presenceHandlers.delete(handler);
+    };
   }
 
   subscribeToChat(chatId: string, cb: ChatHandler) {
@@ -110,7 +127,10 @@ class WebSocketService {
     if (!this.client?.connected) return;
     this.client.publish({
       destination: "/app/chat.read",
-      body: JSON.stringify({ chatId: Number(chatId), messageId: Number(messageId) }),
+      body: JSON.stringify({
+        chatId: Number(chatId),
+        messageId: Number(messageId),
+      }),
     });
   }
 
@@ -149,13 +169,10 @@ class WebSocketService {
           this.chatEventHandlers.forEach((h) => h(event));
         });
         // File transfers still use the signal channel.
+        // File transfer events.
         this.client?.subscribe("/user/queue/file-transfers", (frame) => {
           const event = JSON.parse(frame.body) as WsEvent;
-          if (isRtcSignalType(event.type)) {
-            this.fileTransferSignalHandlers.forEach((h) => h(event));
-            return;
-          }
-          this.fileTransferHandlers.forEach((h) => h(event));
+          this.signalHandlers.forEach((h) => h(event));
         });
         // Presence updates (online/offline).
         this.client?.subscribe("/topic/presence", (frame) => {
